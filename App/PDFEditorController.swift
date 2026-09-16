@@ -2,6 +2,45 @@ import SwiftUI
 import PDFKit
 import PencilKit
 
+#if READER_PROBE
+@MainActor
+private enum ReaderKeyTrace {
+    static var codes: [Int] = []
+    static weak var responder: UIResponder?
+    static let install: Void = {
+        guard let original = class_getInstanceMethod(UIApplication.self, #selector(UIApplication.sendEvent(_:))),
+              let replacement = class_getInstanceMethod(UIApplication.self, #selector(UIApplication.readerSendEvent(_:))) else { return }
+        method_exchangeImplementations(original, replacement)
+    }()
+}
+
+extension UIApplication {
+    @objc fileprivate func readerSendEvent(_ event: UIEvent) {
+        if let presses = event as? UIPressesEvent {
+            for press in presses.allPresses where press.phase == .began {
+                ReaderKeyTrace.codes.append(press.key?.keyCode.rawValue ?? -1)
+            }
+        }
+        readerSendEvent(event)
+    }
+}
+
+extension UIResponder {
+    @objc fileprivate func readerCaptureResponder() {
+        ReaderKeyTrace.responder = self
+    }
+}
+
+final class DiagnosticPDFView: PDFView {
+    var diagnostics: (() -> String)?
+
+    override var accessibilityValue: String? {
+        get { diagnostics?() ?? super.accessibilityValue }
+        set { super.accessibilityValue = newValue }
+    }
+}
+#endif
+
 struct PDFEditorRepresentable: UIViewControllerRepresentable {
     let document: PDFDocument
     let model: EditorModel
@@ -25,7 +64,15 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
 /// PDFView plus the pencil tools. Çiz (default): the pencil draws with PencilKit, fingers scroll. Seç: the pencil
 /// selects text at once. Gez: pencil and fingers scroll. Yazı: a tap places a text box.
 final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, UIGestureRecognizerDelegate {
+#if READER_PROBE
+    let pdfView = DiagnosticPDFView()
+    private var keyboardCommandQueries = 0
+    private var keyboardActionCount = 0
+    private var keyboardPressCount = 0
+    private var keyboardFocusAccepted = false
+#else
     let pdfView = PDFView()
+#endif
     let document: PDFDocument
     weak var model: EditorModel?
     var undo: UndoManager?
@@ -130,6 +177,9 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     override var keyCommands: [UIKeyCommand]? {
+#if READER_PROBE
+        keyboardCommandQueries += 1
+#endif
         guard keyboardNavigationAvailable else { return [] }
         let shortcuts: [(String, UIKeyModifierFlags, String)] = [
             (UIKeyCommand.inputDownArrow, [], "Aşağı kaydır"),
@@ -153,6 +203,9 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     @objc private func scrollWithKeyboard(_ command: UIKeyCommand) {
+#if READER_PROBE
+        keyboardActionCount += 1
+#endif
         guard keyboardNavigationAvailable else { return }
         let backward = command.input == UIKeyCommand.inputUpArrow || command.input == UIKeyCommand.inputPageUp
             || (command.input == " " && command.modifierFlags.contains(.shift))
@@ -172,8 +225,43 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     @objc private func restoreKeyboardFocusAfterScroll(_ gesture: UIPanGestureRecognizer) {
         guard gesture.state == .ended || gesture.state == .cancelled,
               keyboardNavigationAvailable else { return }
+#if READER_PROBE
+        keyboardFocusAccepted = becomeFirstResponder()
+#else
         becomeFirstResponder()
+#endif
     }
+
+#if READER_PROBE
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        keyboardPressCount += presses.count
+        super.pressesBegan(presses, with: event)
+    }
+
+    private func readerDiagnostics() -> String {
+        ReaderKeyTrace.responder = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.readerCaptureResponder), to: nil, from: nil, for: nil)
+        let chain = ReaderKeyTrace.responder.map {
+            Array(sequence(first: $0, next: { $0.next }).prefix(12)).map { String(describing: type(of: $0)) }
+        } ?? []
+        let state: [String: Any] = [
+            "offset": scrollView?.contentOffset.y ?? -1,
+            "height": scrollView?.bounds.height ?? 0,
+            "decelerating": scrollView?.isDecelerating ?? false,
+            "available": keyboardNavigationAvailable,
+            "notes": model?.showNotes ?? false,
+            "controllerFocused": isFirstResponder,
+            "chain": chain,
+            "focusAccepted": keyboardFocusAccepted,
+            "codes": ReaderKeyTrace.codes,
+            "queries": keyboardCommandQueries,
+            "actions": keyboardActionCount,
+            "presses": keyboardPressCount
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) else { return "{}" }
+        return String(decoding: data, as: UTF8.self)
+    }
+#endif
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -199,6 +287,10 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         ])
         pdfView.backgroundColor = .secondarySystemBackground
         pdfView.accessibilityIdentifier = "reader.pdf"
+#if READER_PROBE
+        _ = ReaderKeyTrace.install
+        pdfView.diagnostics = { [weak self] in self?.readerDiagnostics() ?? "{}" }
+#endif
         toolPicker.showsDrawingPolicyControls = false
         // The overlay provider must be in place before the document is set.
         overlays.toolPicker = toolPicker

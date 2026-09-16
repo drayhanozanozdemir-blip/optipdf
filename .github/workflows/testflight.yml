@@ -53,7 +53,7 @@ jobs:
           xcodebuild test -project OptiPDF.xcodeproj -scheme OptiPDF \
             -destination "platform=iOS Simulator,id=$DEVICE" CODE_SIGNING_ALLOWED=NO SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG READER_PROBE" \
             -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/ReaderProbe.xcresult" \
-            2>&1 | tee "$RUNNER_TEMP/reader-probe.log" | grep -E 'error:|warning:|Test Case|Executed|TEST'
+            2>&1 | tee "$RUNNER_TEMP/reader-probe.log" | grep -E 'error:|warning:|Test Case|Executed|TEST|KEYTRACE'
       - name: Export iPad screenshots
         if: always() && inputs.probe_source != ''
         run: |
