@@ -158,8 +158,8 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         guard !programmatic, let canvas = canvasView as? PageCanvasView, let page = canvas.page, canvas.bounds.width > 1 else { return }
         if let expected = canvas.expectedData {
-            canvas.expectedData = nil
             if expected == canvas.drawing.dataRepresentation() { return }
+            canvas.expectedData = nil
         }
         var current = canvas.drawing
         if snapShapes, current.strokes.count == canvas.strokeCount + 1, let last = current.strokes.last,

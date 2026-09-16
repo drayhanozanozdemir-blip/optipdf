@@ -5,12 +5,8 @@ import UniformTypeIdentifiers
 @main
 struct OptiPDFApp: App {
     var body: some Scene {
-#if DEBUG
-        if UserDefaults.standard.bool(forKey: "readerProbe") {
-            WindowGroup { ReaderPreview() }
-        } else {
-            documents
-        }
+#if READER_PROBE
+        WindowGroup { ReaderPreview() }
 #else
         documents
 #endif
