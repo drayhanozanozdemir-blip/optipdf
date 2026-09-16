@@ -178,7 +178,8 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
         let canvas = PageCanvasView()
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        canvas.drawingPolicy = .pencilOnly
+        // iPad: the pencil draws and fingers scroll. iPhone has no pencil, so a finger draws.
+        canvas.drawingPolicy = UIDevice.current.userInterfaceIdiom == .phone ? .anyInput : .pencilOnly
         canvas.isScrollEnabled = false
         canvas.delegate = self
         canvas.onResize = { [weak self] canvas in self?.sync(canvas) }

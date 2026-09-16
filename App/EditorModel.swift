@@ -157,7 +157,7 @@ struct OptiService {
 
 @MainActor
 final class EditorModel: ObservableObject {
-    @Published var tool: EditorTool = EditorTool(rawValue: UserDefaults.standard.string(forKey: "lastTool") ?? "") ?? .draw {
+    @Published var tool: EditorTool = EditorTool(rawValue: UserDefaults.standard.string(forKey: "lastTool") ?? "") ?? (UIDevice.current.userInterfaceIdiom == .pad ? .draw : .navigate) {
         didSet {
             UserDefaults.standard.set(tool.rawValue, forKey: "lastTool")
             if oldValue != tool { controller?.apply(tool: tool) }

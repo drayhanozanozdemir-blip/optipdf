@@ -7,6 +7,7 @@ struct EditorView: View {
     let title: String
     @StateObject private var model = EditorModel()
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @AppStorage("targetLanguage") private var target = "tr"
     @AppStorage("engine") private var engine = "fable"
     @State private var searchText = ""
@@ -16,6 +17,9 @@ struct EditorView: View {
     @State private var addingNote = false
     @State private var showPages = false
     @State private var showOutline = false
+
+    /// iPhone and narrow iPad windows: one menu instead of a toolbar row, icon-only selection bar.
+    private var compact: Bool { sizeClass == .compact }
 
     static let languages: [(code: String, name: String)] = [
         ("tr", "Türkçe"), ("de-ch", "Deutsch (CH)"), ("gsw-zh", "Züritüütsch"), ("en", "English"),
@@ -85,63 +89,88 @@ struct EditorView: View {
         ToolbarItem(placement: .principal) {
             Picker("Araç", selection: $model.tool) {
                 ForEach(EditorTool.allCases) { tool in
-                    Text(tool.title).tag(tool)
+                    Group {
+                        if compact { Image(systemName: tool.symbol) } else { Text(tool.title) }
+                    }
+                    .tag(tool)
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 300)
+            .frame(width: compact ? 190 : 300)
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                Button { model.run(.translatePage, engine: engine, target: target) } label: {
-                    Label("Sayfayı çevir", systemImage: "character.book.closed")
+            if compact {
+                Menu {
+                    Section { aiButtons }
+                    Section { navigationButtons }
+                    Section { settingsPickers }
+                    fullscreenButton
+                } label: {
+                    Label("Menü", systemImage: "ellipsis.circle")
                 }
-                Button { model.run(.summarizePage, engine: engine, target: target) } label: {
-                    Label("Sayfayı özetle", systemImage: "text.redaction")
-                }
-                Button { asking = true } label: {
-                    Label("Soru sor", systemImage: "questionmark.bubble")
-                }
-            } label: {
-                Label("Yapay zekâ", systemImage: "sparkles")
+            } else {
+                Menu { aiButtons } label: { Label("Yapay zekâ", systemImage: "sparkles") }
+                navigationButtons
+                Menu { settingsPickers } label: { Label("Ayarlar", systemImage: "gearshape") }
+                fullscreenButton
             }
-            Button { model.showNotes.toggle() } label: {
-                Label("Notlar", systemImage: "note.text")
+        }
+    }
+
+    @ViewBuilder
+    private var aiButtons: some View {
+        Button { model.run(.translatePage, engine: engine, target: target) } label: {
+            Label("Sayfayı çevir", systemImage: "character.book.closed")
+        }
+        Button { model.run(.summarizePage, engine: engine, target: target) } label: {
+            Label("Sayfayı özetle", systemImage: "text.redaction")
+        }
+        Button { asking = true } label: {
+            Label("Soru sor", systemImage: "questionmark.bubble")
+        }
+    }
+
+    @ViewBuilder
+    private var navigationButtons: some View {
+        Button { model.showNotes.toggle() } label: {
+            Label("Notlar", systemImage: "note.text")
+        }
+        Button { showOutline = true } label: {
+            Label("İçindekiler", systemImage: "list.bullet.indent")
+        }
+        Button { showPages = true } label: {
+            Label("Sayfalar", systemImage: "square.grid.2x2")
+        }
+        Button { model.controller?.exportFlattened() } label: {
+            Label("Dışa aktar", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    @ViewBuilder
+    private var settingsPickers: some View {
+        Picker("Görünüm", selection: $model.displayMode) {
+            Text("Sürekli kaydır").tag("continuous")
+            Text("Sayfa sayfa çevir").tag("page")
+            Text("İki sayfa").tag("twoUp")
+        }
+        Picker("Hedef dil", selection: $target) {
+            ForEach(Self.languages, id: \.code) { language in
+                Text(language.name).tag(language.code)
             }
-            Button { showOutline = true } label: {
-                Label("İçindekiler", systemImage: "list.bullet.indent")
-            }
-            Button { showPages = true } label: {
-                Label("Sayfalar", systemImage: "square.grid.2x2")
-            }
-            Button { model.controller?.exportFlattened() } label: {
-                Label("Dışa aktar", systemImage: "square.and.arrow.up")
-            }
-            Menu {
-                Picker("Görünüm", selection: $model.displayMode) {
-                    Text("Sürekli kaydır").tag("continuous")
-                    Text("Sayfa sayfa çevir").tag("page")
-                    Text("İki sayfa").tag("twoUp")
-                }
-                Picker("Hedef dil", selection: $target) {
-                    ForEach(Self.languages, id: \.code) { language in
-                        Text(language.name).tag(language.code)
-                    }
-                }
-                Picker("Motor", selection: $engine) {
-                    Text("Fable (en iyi kalite)").tag("fable")
-                    Text("Astra (hızlı)").tag("astra")
-                    Text("Cihazda (hassas belgeler)").tag("device")
-                }
-            } label: {
-                Label("Ayarlar", systemImage: "gearshape")
-            }
-            Button {
-                model.showNotes = false
-                model.fullscreen = true
-            } label: {
-                Label("Tam ekran", systemImage: "arrow.up.left.and.arrow.down.right")
-            }
+        }
+        Picker("Motor", selection: $engine) {
+            Text("Fable (en iyi kalite)").tag("fable")
+            Text("Astra (hızlı)").tag("astra")
+            Text("Cihazda (hassas belgeler)").tag("device")
+        }
+    }
+
+    private var fullscreenButton: some View {
+        Button {
+            model.showNotes = false
+            model.fullscreen = true
+        } label: {
+            Label("Tam ekran", systemImage: "arrow.up.left.and.arrow.down.right")
         }
     }
 
@@ -227,11 +256,11 @@ struct EditorView: View {
 
     /// The action bar floats just above the selection (below it near the top edge) and follows it while scrolling.
     private func floatingSelectionBar(in size: CGSize) -> some View {
-        let barWidth: CGFloat = 540
-        let barHeight: CGFloat = 58
+        let barWidth: CGFloat = compact ? 372 : 560
+        let barHeight: CGFloat = compact ? 50 : 58
         let halfWidth = barWidth / 2 + 12
         let midX = model.selectionFrame?.midX ?? size.width / 2
-        let x = min(max(midX, halfWidth), max(halfWidth, size.width - halfWidth))
+        let x = size.width <= barWidth + 24 ? size.width / 2 : min(max(midX, halfWidth), size.width - halfWidth)
         var y = size.height - barHeight / 2 - 24
         if let frame = model.selectionFrame {
             let above = frame.minY - barHeight / 2 - 16
@@ -242,7 +271,7 @@ struct EditorView: View {
     }
 
     private var selectionBar: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: compact ? 0 : 4) {
             barButton("Çevir", "character.bubble") { model.run(.translate, engine: engine, target: target) }
             barButton("Açıkla", "sparkles") { model.run(.explain, engine: engine, target: target) }
             Divider().frame(height: 28)
@@ -256,8 +285,8 @@ struct EditorView: View {
             }
             barButton("Kapat", "xmark") { model.controller?.clearSelection() }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, compact ? 6 : 10)
+        .padding(.vertical, compact ? 3 : 6)
         .background(.regularMaterial, in: Capsule())
         .shadow(radius: 8, y: 2)
     }
@@ -266,11 +295,12 @@ struct EditorView: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: symbol).font(.system(size: 17, weight: .medium))
-                Text(title).font(.caption2)
+                if !compact { Text(title).font(.caption2) }
             }
-            .frame(minWidth: 56, minHeight: 44)
+            .frame(minWidth: compact ? 38 : 56, minHeight: 44)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 
     private var searchPanel: some View {
@@ -338,7 +368,7 @@ struct ResultSheet: View {
                             }
                         }
                         if result.onDevice && !result.output.isEmpty {
-                            Label("Metin iPad'den çıkmadı.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
+                            Label("Metin cihazdan çıkmadı.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .padding()
