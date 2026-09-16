@@ -75,6 +75,7 @@ struct EditorView: View {
                             .background(.regularMaterial, in: Capsule())
                     }
                     .accessibilityLabel(model.fullscreen ? "Tam ekrandan çık" : "Tam ekran")
+                    .accessibilityIdentifier("reader.fullscreen")
                 }
                 .buttonStyle(.plain)
                 .padding(16)
@@ -247,6 +248,7 @@ struct EditorView: View {
                     .background(.regularMaterial, in: Capsule())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("reader.pageIndicator")
             .padding(16)
         }
     }

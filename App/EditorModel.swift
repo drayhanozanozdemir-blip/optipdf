@@ -191,7 +191,7 @@ final class EditorModel: ObservableObject {
     }
     @Published var searchResults: [PDFSelection] = []
     @Published var fullscreen = false {
-        didSet { controller?.updateControls() }
+        didSet { if oldValue != fullscreen { controller?.updateControls() } }
     }
     @Published var shapeSnap = false {
         didSet { controller?.setShapeSnap(shapeSnap) }
@@ -203,7 +203,7 @@ final class EditorModel: ObservableObject {
     private var notesTask: Task<Void, Never>?
 
     @Published var hudVisible = true {
-        didSet { controller?.updateControls() }
+        didSet { if oldValue != hudVisible { controller?.updateControls() } }
     }
     @Published var isSelecting = false
     private var hudTimer: Task<Void, Never>?

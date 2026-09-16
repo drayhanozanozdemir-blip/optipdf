@@ -1,8 +1,15 @@
 name: TestFlight
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+    inputs:
+      publish:
+        description: Publish to personal TestFlight after validation
+        type: boolean
+        default: false
+      probe_source:
+        description: Optional one-off XCTest UI probe (runner temporary files only)
+        type: string
+        default: ''
 jobs:
   testflight:
     runs-on: macos-26
@@ -17,6 +24,50 @@ jobs:
           xcodebuild -version
       - name: Generate the Xcode project
         run: xcodegen generate
+      - name: Prepare one-off iPad UI probe
+        if: inputs.probe_source != ''
+        env:
+          PROBE_SOURCE: ${{ inputs.probe_source }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/ReaderProbe"
+          printf '%s' "$PROBE_SOURCE" > "$RUNNER_TEMP/ReaderProbe/ReaderProbe.swift"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path('project.yml')
+          text = path.read_text()
+          target = '  ReaderProbe:\n    type: bundle.ui-testing\n    platform: iOS\n    sources:\n      - ' + os.environ['RUNNER_TEMP'] + '/ReaderProbe\n    settings:\n      base:\n        GENERATE_INFOPLIST_FILE: true\n        TEST_TARGET_NAME: OptiPDF\n    dependencies:\n      - target: OptiPDF\n'
+          text = text.replace('schemes:\n', target + 'schemes:\n')
+          text += '    test:\n      targets:\n        - ReaderProbe\n'
+          path.write_text(text)
+          PY
+          xcodegen generate
+      - name: Run iPad UI probe
+        if: inputs.probe_source != ''
+        timeout-minutes: 15
+        run: |
+          set -eo pipefail
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for group in devices.values() for device in group if "iPad" in device["name"]))')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcodebuild test -project OptiPDF.xcodeproj -scheme OptiPDF \
+            -destination "platform=iOS Simulator,id=$DEVICE" CODE_SIGNING_ALLOWED=NO \
+            -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/ReaderProbe.xcresult" \
+            2>&1 | tee "$RUNNER_TEMP/reader-probe.log" | grep -E 'error:|warning:|Test Case|Executed|TEST'
+      - name: Upload iPad probe evidence
+        if: always() && inputs.probe_source != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: reader-probe-evidence
+          path: |
+            ${{ runner.temp }}/ReaderProbe.xcresult
+            ${{ runner.temp }}/reader-probe.log
+          retention-days: 3
+      - name: Restore release project
+        if: inputs.probe_source != ''
+        run: |
+          git restore project.yml
+          xcodegen generate
       - name: Compile for iOS Simulator
         run: |
           set -eo pipefail
@@ -24,6 +75,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build \
             2>&1 | tee simulator-build.log | grep -E 'error:|warning:|BUILD'
       - name: Set up App Store signing
+        if: inputs.publish
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
@@ -35,12 +87,14 @@ jobs:
           keychain add-certificates
           xcode-project use-profiles --archive-method app-store --custom-export-options '{"testFlightInternalTestingOnly": true}'
       - name: Build the signed IPA
+        if: inputs.publish
         env:
           OPTICEVIRI_KEY: ${{ secrets.OPTICEVIRI_KEY }}
         run: |
           test -n "$OPTICEVIRI_KEY"
           xcode-project build-ipa --project OptiPDF.xcodeproj --scheme OptiPDF --archive-xcargs "CURRENT_PROJECT_VERSION=${{ github.run_number }} OPTICEVIRI_KEY=$OPTICEVIRI_KEY"
       - name: Upload to TestFlight
+        if: inputs.publish
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}

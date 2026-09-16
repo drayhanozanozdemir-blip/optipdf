@@ -146,6 +146,8 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     }
 
     private func set(_ drawing: PKDrawing, on canvas: PageCanvasView) {
+        if canvas.drawing.strokes.isEmpty && drawing.strokes.isEmpty { return }
+        if canvas.drawing.dataRepresentation() == drawing.dataRepresentation() { return }
         canvas.expectedData = drawing.dataRepresentation()
         programmatic = true
         canvas.drawing = drawing
@@ -171,6 +173,8 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
         let s = scale(of: canvas)
         let updated = current.transformed(using: CGAffineTransform(scaleX: 1 / s, y: 1 / s))
         let previous = stored[page] ?? PKDrawing()
+        if previous.strokes.isEmpty && updated.strokes.isEmpty { return }
+        guard previous.dataRepresentation() != updated.dataRepresentation() else { return }
         stored[page] = updated
         onChange?(page, previous, updated)
     }
