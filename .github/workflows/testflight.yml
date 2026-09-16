@@ -1,0 +1,42 @@
+name: TestFlight
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          brew install xcodegen
+          pipx install codemagic-cli-tools
+          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | tail -n 1)"
+          xcodebuild -version
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Set up App Store signing
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
+        run: |
+          keychain initialize
+          app-store-connect fetch-signing-files ch.ozan.optipdf --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles --archive-method app-store --custom-export-options '{"testFlightInternalTestingOnly": true}'
+      - name: Build the signed IPA
+        env:
+          OPTICEVIRI_KEY: ${{ secrets.OPTICEVIRI_KEY }}
+        run: |
+          test -n "$OPTICEVIRI_KEY"
+          xcode-project build-ipa --project OptiPDF.xcodeproj --scheme OptiPDF --archive-xcargs "CURRENT_PROJECT_VERSION=${{ github.run_number }} OPTICEVIRI_KEY=$OPTICEVIRI_KEY"
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: app-store-connect publish --path "build/ios/ipa/*.ipa"

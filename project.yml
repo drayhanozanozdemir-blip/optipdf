@@ -1,0 +1,57 @@
+name: OptiPDF
+options:
+  bundleIdPrefix: ch.ozan
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "2"
+    # Injected at build time from the CI secret; never committed.
+    OPTICEVIRI_KEY: ""
+targets:
+  OptiPDF:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: OptiPDF
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        OptiCeviriBaseURL: https://opticeviri-drayh.netlify.app
+        OptiCeviriAccessKey: $(OPTICEVIRI_KEY)
+        UILaunchScreen: {}
+        UISupportsDocumentBrowser: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ch.ozan.optipdf
+        # XcodeGen's per-target iOS preset otherwise overrides the global setting.
+        TARGETED_DEVICE_FAMILY: "2"
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+schemes:
+  OptiPDF:
+    build:
+      targets:
+        OptiPDF: all
