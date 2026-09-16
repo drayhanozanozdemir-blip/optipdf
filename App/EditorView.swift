@@ -29,11 +29,11 @@ struct EditorView: View {
     var body: some View {
         PDFEditorRepresentable(document: file.pdf, model: model, undoManager: undoManager, title: title)
             .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
-            .overlay {
-                GeometryReader { proxy in
-                    if model.selectionText != nil && model.selectionFrame != nil && !model.isScrolling && !model.isSelecting {
-                        floatingSelectionBar(in: proxy.size)
-                    }
+            .overlay(alignment: .bottom) {
+                if model.selectionText != nil && !model.isSelecting {
+                    selectionToolbar
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 76)
                 }
             }
             .overlay(alignment: .top) { topOverlays }
@@ -50,6 +50,14 @@ struct EditorView: View {
                             model.controller?.fitPage()
                         }
                         navigationButtons
+                        Section("Araçlar ve ayarlar") {
+                            Picker("Araç", selection: $model.tool) {
+                                ForEach(EditorTool.allCases) { tool in
+                                    Label(tool.title, systemImage: tool.symbol).tag(tool)
+                                }
+                            }
+                            settingsPickers
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                             .frame(width: 44, height: 44)
@@ -183,6 +191,11 @@ struct EditorView: View {
 
     @ViewBuilder
     private var settingsPickers: some View {
+        Picker("Klavye kaydırma adımı", selection: $model.keyboardScrollStep) {
+            Text("Kısa (40 pt)").tag(40.0)
+            Text("Normal (80 pt)").tag(80.0)
+            Text("Uzun (160 pt)").tag(160.0)
+        }
         Picker("Görünüm", selection: $model.displayMode) {
             Text("Sürekli kaydır").tag("continuous")
             Text("Sayfa sayfa çevir").tag("page")
@@ -290,26 +303,14 @@ struct EditorView: View {
         .shadow(radius: 6, y: 2)
     }
 
-    /// The action bar floats just above the selection (below it near the top edge) and follows it while scrolling.
-    private func floatingSelectionBar(in size: CGSize) -> some View {
-        let barWidth: CGFloat = min(compact ? 372 : 560, max(44, size.width - 24))
-        let barHeight: CGFloat = compact ? 50 : 58
-        let halfWidth = barWidth / 2 + 12
-        let midX = model.selectionFrame?.midX ?? size.width / 2
-        let x = size.width <= barWidth + 24 ? size.width / 2 : min(max(midX, halfWidth), size.width - halfWidth)
-        var y = size.height - barHeight / 2 - 24
-        if let frame = model.selectionFrame {
-            let above = frame.minY - barHeight / 2 - 16
-            let below = frame.maxY + barHeight / 2 + 16
-            y = above > barHeight / 2 + 70 ? above : min(below, size.height - barHeight / 2 - 12)
-        }
-        return ScrollView(.horizontal, showsIndicators: false) {
+    private var selectionToolbar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
             selectionBar
         }
-        .frame(width: barWidth, height: barHeight + 8)
+        .frame(maxWidth: 560)
+        .frame(height: compact ? 58 : 66)
         .background(.regularMaterial, in: Capsule())
         .shadow(radius: 8, y: 2)
-        .position(x: x, y: max(barHeight / 2 + 12, y))
     }
 
     private var selectionBar: some View {
@@ -522,16 +523,18 @@ struct NotesPanel: View {
                     } label: {
                         Label("Notları özetle", systemImage: "sparkles")
                     }
-                    .disabled(model.notes.isEmpty)
+                    .disabled(model.notes.isEmpty || model.notesLoading)
                     Spacer()
                     ShareLink(item: model.markdownExport()) {
                         Label("Dışa aktar", systemImage: "square.and.arrow.up")
                     }
-                    .disabled(model.notes.isEmpty)
+                    .disabled(model.notes.isEmpty || model.notesLoading)
                 }
                 .buttonStyle(.borderless)
             }
-            if model.notes.isEmpty {
+            if model.notesLoading {
+                ProgressView("Notlar yükleniyor…")
+            } else if model.notes.isEmpty {
                 Text("Henüz not yok. Seç ile metni işaretle, Vurgula veya Not ekle.")
                     .foregroundStyle(.secondary)
             }

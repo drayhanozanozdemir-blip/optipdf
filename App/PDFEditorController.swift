@@ -74,11 +74,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         gesture.delegate = self
         return gesture
     }()
-    private var scrollSettle: DispatchWorkItem?
     private var selectionStart: (page: PDFPage, point: CGPoint, word: PDFSelection?)?
     private var tool: EditorTool = .draw
-    private var observations: [NSKeyValueObservation] = []
-    private var frameUpdatePending = false
     private weak var fullscreenNavigationController: UINavigationController?
     private var chromeBeforeFullscreen: (navigationHidden: Bool, toolbarHidden: Bool)?
 
@@ -91,8 +88,64 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     override var canBecomeFirstResponder: Bool { true }
 
+    private var keyboardNavigationAvailable: Bool {
+        guard let window = viewIfLoaded?.window, model?.showNotes != true else { return false }
+        func editingText(in view: UIView) -> Bool {
+            if view.isFirstResponder && view is UITextInput { return true }
+            return view.subviews.contains(where: editingText)
+        }
+        guard !editingText(in: window) else { return false }
+        var ancestor: UIViewController? = self
+        while let controller = ancestor {
+            if controller.presentedViewController != nil { return false }
+            ancestor = controller.parent
+        }
+        return true
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard keyboardNavigationAvailable else { return [] }
+        let shortcuts: [(String, UIKeyModifierFlags, String)] = [
+            (UIKeyCommand.inputDownArrow, [], "Aşağı kaydır"),
+            (UIKeyCommand.inputUpArrow, [], "Yukarı kaydır"),
+            (UIKeyCommand.inputPageDown, [], "Bir ekran aşağı"),
+            (UIKeyCommand.inputPageUp, [], "Bir ekran yukarı"),
+            (" ", [], "Bir ekran aşağı"),
+            (" ", .shift, "Bir ekran yukarı")
+        ]
+        return shortcuts.map { input, modifiers, title in
+            let command = UIKeyCommand(input: input, modifierFlags: modifiers, action: #selector(scrollWithKeyboard(_:)))
+            command.discoverabilityTitle = title
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+    }
+
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(scrollWithKeyboard(_:)) { return keyboardNavigationAvailable }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    @objc private func scrollWithKeyboard(_ command: UIKeyCommand) {
+        guard keyboardNavigationAvailable else { return }
+        let backward = command.input == UIKeyCommand.inputUpArrow || command.input == UIKeyCommand.inputPageUp
+            || (command.input == " " && command.modifierFlags.contains(.shift))
+        if model?.displayMode == "page" {
+            if backward { pdfView.goToPreviousPage(nil) } else { pdfView.goToNextPage(nil) }
+            return
+        }
+        guard let scroll = scrollView else { return }
+        let fullStep = command.input == UIKeyCommand.inputPageDown || command.input == UIKeyCommand.inputPageUp || command.input == " "
+        let distance = fullStep ? scroll.bounds.height * 0.85 : CGFloat(model?.keyboardScrollStep ?? 80)
+        let minimum = -scroll.adjustedContentInset.top
+        let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+        let offset = min(maximum, max(minimum, scroll.contentOffset.y + (backward ? -distance : distance)))
+        scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: offset), animated: false)
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        becomeFirstResponder()
         updateControls()
     }
 
@@ -116,7 +169,6 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         toolPicker.showsDrawingPolicyControls = false
         // The overlay provider must be in place before the document is set.
         overlays.toolPicker = toolPicker
-        overlays.load(document)
         overlays.onChange = { [weak self] page, previous, updated in self?.drawingChanged(page, from: previous, to: updated) }
         pdfView.pageOverlayViewProvider = overlays
         pdfView.document = document
@@ -137,7 +189,6 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         applyDisplay(model?.displayMode ?? "continuous")
         apply(tool: model?.tool ?? tool, force: true)
         DispatchQueue.main.async { [weak self] in
-            self?.model?.reloadNotes()
             self?.pageChanged()
         }
     }
@@ -238,7 +289,6 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             pdfView.displayDirection = .vertical
         }
         pdfView.autoScales = true
-        observeScrolling()
         apply(tool: tool, force: true)
     }
 
@@ -255,44 +305,6 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             return nil
         }
         return find(pdfView)
-    }
-
-    private func observeScrolling() {
-        observations.removeAll()
-        guard let scroll = scrollView else { return }
-        observations.append(scroll.observe(\.contentOffset) { [weak self] _, _ in self?.scheduleSelectionFrame() })
-        observations.append(scroll.observe(\.zoomScale) { [weak self] _, _ in self?.scheduleSelectionFrame() })
-    }
-
-    private func scheduleSelectionFrame() {
-        guard !frameUpdatePending else { return }
-        frameUpdatePending = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.frameUpdatePending = false
-            self.model?.isScrolling = true
-            self.scrollSettle?.cancel()
-            let settle = DispatchWorkItem { [weak self] in
-                self?.updateSelectionFrame()
-                self?.model?.isScrolling = false
-            }
-            self.scrollSettle = settle
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: settle)
-        }
-    }
-
-    /// Where the selection is on screen, so the action bar can float next to it while the page scrolls.
-    private func updateSelectionFrame() {
-        guard model?.selectionText != nil, let selection = pdfView.currentSelection else {
-            if model?.selectionFrame != nil { model?.selectionFrame = nil }
-            return
-        }
-        var frame = CGRect.null
-        for page in selection.pages {
-            let visible = pdfView.convert(selection.bounds(for: page), from: page).intersection(pdfView.bounds)
-            if !visible.isNull && !visible.isEmpty { frame = frame.union(visible) }
-        }
-        model?.selectionFrame = frame.isNull ? nil : frame
     }
 
     @objc private func pencilSelecting(_ gesture: UILongPressGestureRecognizer) {
@@ -348,21 +360,21 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     @objc private func selectionChanged() {
         let text = pdfView.currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
-        model?.selectionText = (text?.isEmpty == false) ? text : nil
-        updateSelectionFrame()
+        let nextText = (text?.isEmpty == false) ? text : nil
+        if model?.selectionText != nextText { model?.selectionText = nextText }
     }
 
     @objc private func pageChanged() {
-        model?.pageCount = document.pageCount
+        if model?.pageCount != document.pageCount { model?.pageCount = document.pageCount }
         guard let page = pdfView.currentPage else { return }
-        model?.currentPage = document.index(for: page)
+        let index = document.index(for: page)
+        if model?.currentPage != index { model?.currentPage = index }
     }
 
     func clearSelection() {
         pdfView.clearSelection()
         model?.isSelecting = false
         model?.selectionText = nil
-        model?.selectionFrame = nil
     }
 
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {

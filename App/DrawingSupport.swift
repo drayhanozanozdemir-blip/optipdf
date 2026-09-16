@@ -84,6 +84,7 @@ final class DrawingImageAnnotation: PDFAnnotation {
 final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewDelegate {
     private(set) var canvases: [PDFPage: PageCanvasView] = [:]
     private var stored: [PDFPage: PKDrawing] = [:]
+    private var loadedPages: Set<PDFPage> = []
     weak var toolPicker: PKToolPicker?
     var snapShapes = false
     /// Page, previous drawing, new drawing (page units) after a user edit.
@@ -91,17 +92,15 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     private var drawingEnabled = false
     private var programmatic = false
 
-    func load(_ document: PDFDocument) {
-        for index in 0..<document.pageCount {
-            if let page = document.page(at: index) { load(page) }
-        }
-    }
-
     func load(_ page: PDFPage) {
+        guard loadedPages.insert(page).inserted else { return }
         if let drawing = DrawingStorage.load(from: page) { stored[page] = drawing }
     }
 
-    func drawing(for page: PDFPage) -> PKDrawing? { stored[page] }
+    func drawing(for page: PDFPage) -> PKDrawing? {
+        load(page)
+        return stored[page]
+    }
 
     func setDrawing(_ enabled: Bool) {
         drawingEnabled = enabled
@@ -110,11 +109,13 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
 
     /// Replaces a page's drawing without recording a user edit (undo and redo).
     func replace(_ drawing: PKDrawing, for page: PDFPage) {
+        loadedPages.insert(page)
         stored[page] = drawing
         if let canvas = canvases[page] { sync(canvas) }
     }
 
     func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
+        load(page)
         let canvas = canvases[page] ?? makeCanvas()
         canvases[page] = canvas
         canvas.page = page
@@ -140,7 +141,7 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     private func sync(_ canvas: PageCanvasView) {
         guard let page = canvas.page, canvas.bounds.width > 1 else { return }
         let s = scale(of: canvas)
-        let wanted = (stored[page] ?? PKDrawing()).transformed(using: CGAffineTransform(scaleX: s, y: s))
+        let wanted = (drawing(for: page) ?? PKDrawing()).transformed(using: CGAffineTransform(scaleX: s, y: s))
         set(wanted, on: canvas)
     }
 

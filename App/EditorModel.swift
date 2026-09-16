@@ -163,7 +163,6 @@ final class EditorModel: ObservableObject {
             if oldValue != tool { controller?.apply(tool: tool) }
         }
     }
-    @Published var selectionFrame: CGRect?
     @Published var pageCount = 0
     @Published var currentPage = 0
     @Published var pageRevision = 0
@@ -175,8 +174,21 @@ final class EditorModel: ObservableObject {
     }
     @Published var selectionText: String?
     @Published var notes: [NoteItem] = []
+    @Published var notesLoading = false
     @Published var result: AIResult?
-    @Published var showNotes = false
+    @Published var showNotes = false {
+        didSet {
+            if showNotes && !oldValue { reloadNotes() }
+            if !showNotes {
+                notesTask?.cancel()
+                notesLoading = false
+            }
+        }
+    }
+    @Published var keyboardScrollStep = UserDefaults.standard.double(forKey: "keyboardScrollStep") == 0
+        ? 80.0 : UserDefaults.standard.double(forKey: "keyboardScrollStep") {
+        didSet { UserDefaults.standard.set(keyboardScrollStep, forKey: "keyboardScrollStep") }
+    }
     @Published var searchResults: [PDFSelection] = []
     @Published var fullscreen = false {
         didSet { controller?.updateControls() }
@@ -188,11 +200,11 @@ final class EditorModel: ObservableObject {
     @Published var toast: String?
     weak var controller: PDFEditorController?
     private var streamTask: Task<Void, Never>?
+    private var notesTask: Task<Void, Never>?
 
     @Published var hudVisible = true {
         didSet { controller?.updateControls() }
     }
-    @Published var isScrolling = false
     @Published var isSelecting = false
     private var hudTimer: Task<Void, Never>?
 
@@ -300,35 +312,48 @@ final class EditorModel: ObservableObject {
     }
 
     func reloadNotes() {
+        notesTask?.cancel()
+        guard showNotes else { return }
         guard let document = controller?.document else {
             notes = []
+            notesLoading = false
             return
         }
-        var items: [NoteItem] = []
-        for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else { continue }
-            for annotation in page.annotations where !DrawingStorage.isStorage(annotation) {
-                let type = (annotation.type ?? "").replacingOccurrences(of: "/", with: "")
-                guard let kind = NoteItem.kinds[type] else { continue }
-                let quote: String
-                switch type {
-                case "Ink": quote = ""
-                case "FreeText": quote = annotation.contents ?? ""
-                default: quote = (page.selection(for: annotation.bounds)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-                if var last = items.last, last.pageIndex == index, last.kind == kind,
-                   let stamp = annotation.modificationDate, stamp == last.stamp {
-                    last.pairs.append((page, annotation))
-                    if !quote.isEmpty { last.quote += (last.quote.isEmpty ? "" : " ") + quote }
-                    if last.note.isEmpty, type != "FreeText" { last.note = annotation.contents ?? "" }
-                    items[items.count - 1] = last
-                } else {
-                    items.append(NoteItem(pageIndex: index, kind: kind, stamp: annotation.modificationDate, quote: quote,
-                                          note: type == "FreeText" ? "" : (annotation.contents ?? ""), pairs: [(page, annotation)]))
-                }
+        notesLoading = true
+        notesTask = Task { [weak self] in
+            var items: [NoteItem] = []
+            for index in 0..<document.pageCount {
+                do { try await Task.sleep(for: .milliseconds(1)) } catch { return }
+                Self.appendNotes(from: document, at: index, to: &items)
+            }
+            guard !Task.isCancelled else { return }
+            self?.notes = items
+            self?.notesLoading = false
+        }
+    }
+
+    private static func appendNotes(from document: PDFDocument, at index: Int, to items: inout [NoteItem]) {
+        guard let page = document.page(at: index) else { return }
+        for annotation in page.annotations where !DrawingStorage.isStorage(annotation) {
+            let type = (annotation.type ?? "").replacingOccurrences(of: "/", with: "")
+            guard let kind = NoteItem.kinds[type] else { continue }
+            let quote: String
+            switch type {
+            case "Ink": quote = ""
+            case "FreeText": quote = annotation.contents ?? ""
+            default: quote = (page.selection(for: annotation.bounds)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if var last = items.last, last.pageIndex == index, last.kind == kind,
+               let stamp = annotation.modificationDate, stamp == last.stamp {
+                last.pairs.append((page, annotation))
+                if !quote.isEmpty { last.quote += (last.quote.isEmpty ? "" : " ") + quote }
+                if last.note.isEmpty, type != "FreeText" { last.note = annotation.contents ?? "" }
+                items[items.count - 1] = last
+            } else {
+                items.append(NoteItem(pageIndex: index, kind: kind, stamp: annotation.modificationDate, quote: quote,
+                                      note: type == "FreeText" ? "" : (annotation.contents ?? ""), pairs: [(page, annotation)]))
             }
         }
-        notes = items
     }
 
     func markdownExport() -> String {
