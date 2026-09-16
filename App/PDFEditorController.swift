@@ -79,6 +79,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     private var tool: EditorTool = .draw
     private var observations: [NSKeyValueObservation] = []
     private var frameUpdatePending = false
+    private weak var fullscreenNavigationController: UINavigationController?
+    private var chromeBeforeFullscreen: (navigationHidden: Bool, toolbarHidden: Bool)?
 
     init(document: PDFDocument) {
         self.document = document
@@ -88,6 +90,16 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var canBecomeFirstResponder: Bool { true }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        updateControls()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        restoreNavigationChrome()
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -158,11 +170,39 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     func updateControls() {
         guard isViewLoaded else { return }
+        if model?.fullscreen == true, let navigationController {
+            if chromeBeforeFullscreen == nil {
+                fullscreenNavigationController = navigationController
+                chromeBeforeFullscreen = (navigationController.isNavigationBarHidden, navigationController.isToolbarHidden)
+            }
+            navigationController.setNavigationBarHidden(true, animated: false)
+            navigationController.setToolbarHidden(true, animated: false)
+        } else if model?.fullscreen != true {
+            restoreNavigationChrome()
+        }
         let visible = tool == .draw && (model?.fullscreen != true || model?.hudVisible == true)
         toolPicker.setVisible(visible, forFirstResponder: self)
         for canvas in overlays.canvases.values {
             toolPicker.setVisible(visible, forFirstResponder: canvas)
         }
+    }
+
+    private func restoreNavigationChrome() {
+        guard let previous = chromeBeforeFullscreen else { return }
+        fullscreenNavigationController?.setNavigationBarHidden(previous.navigationHidden, animated: false)
+        fullscreenNavigationController?.setToolbarHidden(previous.toolbarHidden, animated: false)
+        chromeBeforeFullscreen = nil
+        fullscreenNavigationController = nil
+    }
+
+    func zoom(by multiplier: CGFloat) {
+        pdfView.autoScales = false
+        pdfView.scaleFactor = min(pdfView.maxScaleFactor, max(pdfView.minScaleFactor, pdfView.scaleFactor * multiplier))
+    }
+
+    func fitPage() {
+        pdfView.autoScales = true
+        pdfView.scaleFactor = pdfView.scaleFactorForSizeToFit
     }
 
     @objc private func toggleHUD(_ gesture: UITapGestureRecognizer) {

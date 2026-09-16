@@ -39,15 +39,37 @@ struct EditorView: View {
             .overlay(alignment: .top) { topOverlays }
             .overlay(alignment: .bottomLeading) { pageIndicator }
             .overlay(alignment: .bottomTrailing) {
-                if model.fullscreen && !model.hudVisible {
-                    Button { model.showHUD() } label: {
+                HStack(spacing: 8) {
+                    Menu {
+                        if model.fullscreen {
+                            Button("Araçları göster") { model.showHUD() }
+                        }
+                        Button("Yakınlaştır", systemImage: "plus.magnifyingglass") { model.controller?.zoom(by: 1.35) }
+                        Button("Uzaklaştır", systemImage: "minus.magnifyingglass") { model.controller?.zoom(by: 1 / 1.35) }
+                        Button("Sayfayı sığdır", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
+                            model.controller?.fitPage()
+                        }
+                        navigationButtons
+                    } label: {
                         Image(systemName: "ellipsis")
                             .frame(width: 44, height: 44)
                             .background(.regularMaterial, in: Circle())
                     }
-                    .accessibilityLabel("Araçları göster")
-                    .padding(16)
+                    .accessibilityLabel("Sayfa ve yakınlaştırma araçları")
+                    Button {
+                        if model.fullscreen { model.exitFullscreen() } else { model.enterFullscreen() }
+                    } label: {
+                        Label(model.fullscreen ? "Çık" : "Tam ekran",
+                              systemImage: model.fullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                            .font(.callout.weight(.medium))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    .accessibilityLabel(model.fullscreen ? "Tam ekrandan çık" : "Tam ekran")
                 }
+                .buttonStyle(.plain)
+                .padding(16)
             }
             .overlay(alignment: .topTrailing) {
                 if !model.searchResults.isEmpty && !model.fullscreen { searchPanel.padding(12) }
