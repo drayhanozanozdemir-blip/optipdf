@@ -15,7 +15,7 @@ private enum ReaderKeyTrace {
 }
 
 extension UIApplication {
-    @objc fileprivate func readerSendEvent(_ event: UIEvent) {
+    @objc fileprivate dynamic func readerSendEvent(_ event: UIEvent) {
         if let presses = event as? UIPressesEvent {
             for press in presses.allPresses where press.phase == .began {
                 ReaderKeyTrace.codes.append(press.key?.keyCode.rawValue ?? -1)
