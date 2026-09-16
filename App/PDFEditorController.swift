@@ -90,6 +90,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     private var chromeBeforeFullscreen: (navigationHidden: Bool, toolbarHidden: Bool)?
     private var pickerVisible = false
     private var pencilScrollOrigin: CGPoint?
+    private weak var keyboardFocusScrollView: UIScrollView?
     private var readerPencilTouchTypes: [NSNumber] {
 #if DEBUG
         if UserDefaults.standard.bool(forKey: "readerProbePencil") {
@@ -121,7 +122,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         guard !editingText(in: window) else { return false }
         var ancestor: UIViewController? = self
         while let controller = ancestor {
-            if controller.presentedViewController != nil { return false }
+            if let presented = controller.presentedViewController,
+               presented.viewIfLoaded?.window != nil, !presented.isBeingDismissed { return false }
             ancestor = controller.parent
         }
         return true
@@ -165,6 +167,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
         let offset = min(maximum, max(minimum, scroll.contentOffset.y + (backward ? -distance : distance)))
         scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: offset), animated: false)
+    }
+
+    @objc private func restoreKeyboardFocusAfterScroll(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .ended || gesture.state == .cancelled,
+              keyboardNavigationAvailable else { return }
+        becomeFirstResponder()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -242,6 +250,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         let direct = NSNumber(value: UITouch.TouchType.direct.rawValue)
         let pointer = NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
         scrollView?.panGestureRecognizer.allowedTouchTypes = [direct, pointer]
+        if keyboardFocusScrollView !== scrollView {
+            keyboardFocusScrollView?.panGestureRecognizer.removeTarget(self, action: #selector(restoreKeyboardFocusAfterScroll(_:)))
+            keyboardFocusScrollView = scrollView
+            keyboardFocusScrollView?.panGestureRecognizer.addTarget(self, action: #selector(restoreKeyboardFocusAfterScroll(_:)))
+        }
 #if DEBUG
         if UserDefaults.standard.bool(forKey: "readerProbePencil") {
             scrollView?.panGestureRecognizer.allowedTouchTypes = [pointer]
