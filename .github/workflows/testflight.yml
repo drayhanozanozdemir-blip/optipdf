@@ -5,7 +5,7 @@ on:
     branches: [main]
 jobs:
   testflight:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
@@ -13,7 +13,7 @@ jobs:
         run: |
           brew install xcodegen
           pipx install codemagic-cli-tools
-          sudo xcode-select -s /Applications/Xcode_16.4.app || sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | tail -n 1)"
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1); if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
           xcodebuild -version
       - name: Generate the Xcode project
         run: xcodegen generate
