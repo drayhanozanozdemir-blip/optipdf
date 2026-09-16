@@ -58,6 +58,13 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         gesture.isEnabled = false
         return gesture
     }()
+    private lazy var pencilWordTap: UITapGestureRecognizer = {
+        let gesture = UITapGestureRecognizer(target: self, action: #selector(selectPencilWord(_:)))
+        gesture.numberOfTapsRequired = 2
+        gesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        gesture.isEnabled = false
+        return gesture
+    }()
     /// A finger tap on the page shows or hides the fullscreen controls.
     private lazy var hudTap: UITapGestureRecognizer = {
         let gesture = UITapGestureRecognizer(target: self, action: #selector(toggleHUD(_:)))
@@ -68,7 +75,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         return gesture
     }()
     private var scrollSettle: DispatchWorkItem?
-    private var selectionStart: (page: PDFPage, point: CGPoint)?
+    private var selectionStart: (page: PDFPage, point: CGPoint, word: PDFSelection?)?
     private var tool: EditorTool = .draw
     private var observations: [NSKeyValueObservation] = []
     private var frameUpdatePending = false
@@ -103,8 +110,10 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         pdfView.document = document
 
         pdfView.addGestureRecognizer(pencilSelect)
+        pdfView.addGestureRecognizer(pencilWordTap)
         pdfView.addGestureRecognizer(textTap)
         pdfView.addGestureRecognizer(hudTap)
+        hudTap.require(toFail: pencilWordTap)
         let pencil = UIPencilInteraction()
         pencil.delegate = self
         view.addInteraction(pencil)
@@ -137,6 +146,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         pencilSelect.isEnabled = newTool == .select || newTool == .navigate
         pencilSelect.minimumPressDuration = newTool == .select ? 0 : 0.3
         pencilSelect.allowableMovement = newTool == .select ? .greatestFiniteMagnitude : 12
+        pencilWordTap.isEnabled = newTool == .navigate
         textTap.isEnabled = newTool == .text
         let direct = NSNumber(value: UITouch.TouchType.direct.rawValue)
         let pencil = NSNumber(value: UITouch.TouchType.pencil.rawValue)
@@ -261,11 +271,16 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         switch gesture.state {
         case .began:
             model?.isSelecting = true
-            selectionStart = (page, point)
-            pdfView.clearSelection()
+            let word = page.selectionForWord(at: point)
+            selectionStart = (page, point, word)
+            pdfView.setCurrentSelection(word, animate: false)
         case .changed, .ended:
             guard let start = selectionStart else { return }
-            let selection = document.selection(from: start.page, at: start.point, to: page, at: point)
+            let moved = start.page !== page || hypot(point.x - start.point.x, point.y - start.point.y) > 3
+            let selection = moved
+                ? document.selection(from: start.page, at: start.point, to: page, at: point)
+                : start.word
+            if moved, let word = start.word { selection?.add(word) }
             pdfView.setCurrentSelection(selection, animate: false)
             if gesture.state == .ended {
                 selectionStart = nil
@@ -275,6 +290,14 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             selectionStart = nil
             model?.isSelecting = false
         }
+    }
+
+    @objc private func selectPencilWord(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        let location = gesture.location(in: pdfView)
+        guard let page = pdfView.page(for: location, nearest: false) else { return }
+        let word = page.selectionForWord(at: pdfView.convert(location, to: page))
+        pdfView.setCurrentSelection(word, animate: false)
     }
 
     @objc private func placeText(_ gesture: UITapGestureRecognizer) {
