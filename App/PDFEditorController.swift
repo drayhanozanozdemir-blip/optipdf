@@ -24,7 +24,7 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
 
 /// PDFView plus the pencil tools. Çiz (default): the pencil draws with PencilKit, fingers scroll. Seç: the pencil
 /// selects text at once. Gez: pencil and fingers scroll. Yazı: a tap places a text box.
-final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
+final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, UIGestureRecognizerDelegate {
     let pdfView = PDFView()
     let document: PDFDocument
     weak var model: EditorModel?
@@ -58,6 +58,16 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         gesture.isEnabled = false
         return gesture
     }()
+    /// A finger tap on the page shows or hides the fullscreen controls.
+    private lazy var hudTap: UITapGestureRecognizer = {
+        let gesture = UITapGestureRecognizer(target: self, action: #selector(toggleHUD(_:)))
+        gesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue),
+                                     NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        gesture.cancelsTouchesInView = false
+        gesture.delegate = self
+        return gesture
+    }()
+    private var scrollSettle: DispatchWorkItem?
     private var selectionStart: (page: PDFPage, point: CGPoint)?
     private var tool: EditorTool = .draw
     private var observations: [NSKeyValueObservation] = []
@@ -94,6 +104,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
 
         pdfView.addGestureRecognizer(pencilSelect)
         pdfView.addGestureRecognizer(textTap)
+        pdfView.addGestureRecognizer(hudTap)
         let pencil = UIPencilInteraction()
         pencil.delegate = self
         view.addInteraction(pencil)
@@ -119,9 +130,13 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         let drawing = newTool == .draw
         pdfView.isInMarkupMode = drawing
         overlays.setDrawing(drawing)
-        toolPicker.setVisible(drawing, forFirstResponder: self)
         if drawing { becomeFirstResponder() }
-        pencilSelect.isEnabled = newTool == .select
+        updateControls()
+        // Seç: the pencil selects at once. Gez: the pencil scrolls; holding it still for a moment, then
+        // dragging, selects text, so nothing needs a finger.
+        pencilSelect.isEnabled = newTool == .select || newTool == .navigate
+        pencilSelect.minimumPressDuration = newTool == .select ? 0 : 0.3
+        pencilSelect.allowableMovement = newTool == .select ? .greatestFiniteMagnitude : 12
         textTap.isEnabled = newTool == .text
         let direct = NSNumber(value: UITouch.TouchType.direct.rawValue)
         let pencil = NSNumber(value: UITouch.TouchType.pencil.rawValue)
@@ -129,6 +144,32 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         let pencilScrolls = newTool == .navigate || newTool == .text
         scrollView?.panGestureRecognizer.allowedTouchTypes = pencilScrolls ? [direct, pencil, pointer] : [direct, pointer]
         if drawing { clearSelection() }
+    }
+
+    func updateControls() {
+        guard isViewLoaded else { return }
+        let visible = tool == .draw && (model?.fullscreen != true || model?.hudVisible == true)
+        toolPicker.setVisible(visible, forFirstResponder: self)
+        for canvas in overlays.canvases.values {
+            toolPicker.setVisible(visible, forFirstResponder: canvas)
+        }
+    }
+
+    @objc private func toggleHUD(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        model?.toggleHUD()
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === hudTap else { return true }
+        return model?.fullscreen == true && model?.selectionText == nil && tool != .text
+            && (touch.type != .pencil || tool == .navigate)
+            && !(tool == .draw && UIDevice.current.userInterfaceIdiom == .phone)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        gestureRecognizer === hudTap || otherGestureRecognizer === hudTap
     }
 
     func applyDisplay(_ mode: String) {
@@ -177,8 +218,16 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         guard !frameUpdatePending else { return }
         frameUpdatePending = true
         DispatchQueue.main.async { [weak self] in
-            self?.frameUpdatePending = false
-            self?.updateSelectionFrame()
+            guard let self else { return }
+            self.frameUpdatePending = false
+            self.model?.isScrolling = true
+            self.scrollSettle?.cancel()
+            let settle = DispatchWorkItem { [weak self] in
+                self?.updateSelectionFrame()
+                self?.model?.isScrolling = false
+            }
+            self.scrollSettle = settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: settle)
         }
     }
 
@@ -190,26 +239,41 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         }
         var frame = CGRect.null
         for page in selection.pages {
-            frame = frame.union(pdfView.convert(selection.bounds(for: page), from: page))
+            let visible = pdfView.convert(selection.bounds(for: page), from: page).intersection(pdfView.bounds)
+            if !visible.isNull && !visible.isEmpty { frame = frame.union(visible) }
         }
         model?.selectionFrame = frame.isNull ? nil : frame
     }
 
     @objc private func pencilSelecting(_ gesture: UILongPressGestureRecognizer) {
+        if gesture.state == .cancelled || gesture.state == .failed {
+            selectionStart = nil
+            model?.isSelecting = false
+            return
+        }
         let location = gesture.location(in: pdfView)
-        guard let page = pdfView.page(for: location, nearest: true) else { return }
+        guard let page = pdfView.page(for: location, nearest: true) else {
+            selectionStart = nil
+            model?.isSelecting = false
+            return
+        }
         let point = pdfView.convert(location, to: page)
         switch gesture.state {
         case .began:
+            model?.isSelecting = true
             selectionStart = (page, point)
             pdfView.clearSelection()
         case .changed, .ended:
             guard let start = selectionStart else { return }
             let selection = document.selection(from: start.page, at: start.point, to: page, at: point)
             pdfView.setCurrentSelection(selection, animate: false)
-            if gesture.state == .ended { selectionStart = nil }
+            if gesture.state == .ended {
+                selectionStart = nil
+                model?.isSelecting = false
+            }
         default:
             selectionStart = nil
+            model?.isSelecting = false
         }
     }
 
@@ -233,6 +297,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
 
     func clearSelection() {
         pdfView.clearSelection()
+        model?.isSelecting = false
         model?.selectionText = nil
         model?.selectionFrame = nil
     }
@@ -243,9 +308,9 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
     }
 
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
-        // While drawing, PencilKit uses the double tap for the eraser.
+        // While drawing, PencilKit uses the double tap for the eraser; otherwise it turns the pen on.
         guard tool != .draw else { return }
-        model?.tool = tool == .select ? .navigate : .select
+        model?.tool = .draw
     }
 
     // MARK: Text and navigation

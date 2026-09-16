@@ -178,7 +178,9 @@ final class EditorModel: ObservableObject {
     @Published var result: AIResult?
     @Published var showNotes = false
     @Published var searchResults: [PDFSelection] = []
-    @Published var fullscreen = false
+    @Published var fullscreen = false {
+        didSet { controller?.updateControls() }
+    }
     @Published var shapeSnap = false {
         didSet { controller?.setShapeSnap(shapeSnap) }
     }
@@ -187,9 +189,46 @@ final class EditorModel: ObservableObject {
     weak var controller: PDFEditorController?
     private var streamTask: Task<Void, Never>?
 
-    /// Apple Pencil Pro squeeze: straight between selecting text and drawing.
+    @Published var hudVisible = true {
+        didSet { controller?.updateControls() }
+    }
+    @Published var isScrolling = false
+    @Published var isSelecting = false
+    private var hudTimer: Task<Void, Never>?
+
+    /// Apple Pencil Pro squeeze: pen on or off. Off means the pencil scrolls and a press-and-drag selects text.
     func cycleSqueeze() {
-        tool = tool == .draw ? .select : .draw
+        tool = tool == .draw ? .navigate : .draw
+        if fullscreen { showHUD() }
+    }
+
+    func toggleHUD() {
+        if hudVisible {
+            hudTimer?.cancel()
+            hudVisible = false
+        } else { showHUD() }
+    }
+
+    /// Shows the fullscreen controls for a few seconds.
+    func showHUD() {
+        hudVisible = true
+        hudTimer?.cancel()
+        hudTimer = Task {
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled, self.fullscreen { self.hudVisible = false }
+        }
+    }
+
+    func enterFullscreen() {
+        showNotes = false
+        fullscreen = true
+        showHUD()
+    }
+
+    func exitFullscreen() {
+        fullscreen = false
+        hudVisible = true
+        hudTimer?.cancel()
     }
 
     func show(toast text: String) {

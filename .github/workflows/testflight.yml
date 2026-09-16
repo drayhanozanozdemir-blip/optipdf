@@ -17,6 +17,12 @@ jobs:
           xcodebuild -version
       - name: Generate the Xcode project
         run: xcodegen generate
+      - name: Compile for iOS Simulator
+        run: |
+          set -eo pipefail
+          xcodebuild -project OptiPDF.xcodeproj -scheme OptiPDF \
+            -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build \
+            2>&1 | tee simulator-build.log | grep -E 'error:|warning:|BUILD'
       - name: Set up App Store signing
         env:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -25,7 +31,7 @@ jobs:
           CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
         run: |
           keychain initialize
-          app-store-connect fetch-signing-files ch.ozan.optipdf --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files ch.ozan.optipdf --type IOS_APP_STORE
           keychain add-certificates
           xcode-project use-profiles --archive-method app-store --custom-export-options '{"testFlightInternalTestingOnly": true}'
       - name: Build the signed IPA

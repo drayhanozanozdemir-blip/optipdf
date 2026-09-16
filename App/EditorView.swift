@@ -31,11 +31,24 @@ struct EditorView: View {
             .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
             .overlay {
                 GeometryReader { proxy in
-                    if model.selectionText != nil { floatingSelectionBar(in: proxy.size) }
+                    if model.selectionText != nil && model.selectionFrame != nil && !model.isScrolling && !model.isSelecting {
+                        floatingSelectionBar(in: proxy.size)
+                    }
                 }
             }
             .overlay(alignment: .top) { topOverlays }
             .overlay(alignment: .bottomLeading) { pageIndicator }
+            .overlay(alignment: .bottomTrailing) {
+                if model.fullscreen && !model.hudVisible {
+                    Button { model.showHUD() } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: 44, height: 44)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                    .accessibilityLabel("Araçları göster")
+                    .padding(16)
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 if !model.searchResults.isEmpty && !model.fullscreen { searchPanel.padding(12) }
             }
@@ -167,8 +180,7 @@ struct EditorView: View {
 
     private var fullscreenButton: some View {
         Button {
-            model.showNotes = false
-            model.fullscreen = true
+            model.enterFullscreen()
         } label: {
             Label("Tam ekran", systemImage: "arrow.up.left.and.arrow.down.right")
         }
@@ -176,8 +188,8 @@ struct EditorView: View {
 
     private var topOverlays: some View {
         VStack(spacing: 8) {
-            if model.fullscreen { fullscreenBar }
-            if model.tool == .draw { drawBar }
+            if model.fullscreen && model.hudVisible { fullscreenBar }
+            if model.tool == .draw && (!model.fullscreen || model.hudVisible) { drawBar }
             if let toast = model.toast {
                 Text(toast)
                     .font(.callout)
@@ -191,7 +203,7 @@ struct EditorView: View {
 
     @ViewBuilder
     private var pageIndicator: some View {
-        if model.pageCount > 0 && model.selectionText == nil {
+        if model.pageCount > 0 && model.selectionText == nil && (!model.fullscreen || model.hudVisible) {
             Button { showPages = true } label: {
                 Text("\(model.currentPage + 1) / \(model.pageCount)")
                     .font(.callout.monospacedDigit())
@@ -207,20 +219,22 @@ struct EditorView: View {
     private var fullscreenBar: some View {
         HStack(spacing: 2) {
             ForEach(EditorTool.allCases) { tool in
-                Button { model.tool = tool } label: {
+                Button { model.tool = tool; model.showHUD() } label: {
                     Image(systemName: tool.symbol)
                         .font(.system(size: 17, weight: .medium))
                         .frame(width: 46, height: 36)
                         .background(model.tool == tool ? Color.accentColor.opacity(0.22) : Color.clear,
                                     in: RoundedRectangle(cornerRadius: 9))
                 }
+                .accessibilityLabel(tool.title)
             }
             Divider().frame(height: 24)
-            Button { model.fullscreen = false } label: {
+            Button { model.exitFullscreen() } label: {
                 Image(systemName: "arrow.down.right.and.arrow.up.left")
                     .font(.system(size: 17, weight: .medium))
                     .frame(width: 46, height: 36)
             }
+            .accessibilityLabel("Tam ekrandan çık")
         }
         .buttonStyle(.plain)
         .padding(4)
@@ -256,7 +270,7 @@ struct EditorView: View {
 
     /// The action bar floats just above the selection (below it near the top edge) and follows it while scrolling.
     private func floatingSelectionBar(in size: CGSize) -> some View {
-        let barWidth: CGFloat = compact ? 372 : 560
+        let barWidth: CGFloat = min(compact ? 372 : 560, max(44, size.width - 24))
         let barHeight: CGFloat = compact ? 50 : 58
         let halfWidth = barWidth / 2 + 12
         let midX = model.selectionFrame?.midX ?? size.width / 2
@@ -267,7 +281,13 @@ struct EditorView: View {
             let below = frame.maxY + barHeight / 2 + 16
             y = above > barHeight / 2 + 70 ? above : min(below, size.height - barHeight / 2 - 12)
         }
-        return selectionBar.position(x: x, y: y)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            selectionBar
+        }
+        .frame(width: barWidth, height: barHeight + 8)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(radius: 8, y: 2)
+        .position(x: x, y: max(barHeight / 2 + 12, y))
     }
 
     private var selectionBar: some View {
@@ -287,8 +307,6 @@ struct EditorView: View {
         }
         .padding(.horizontal, compact ? 6 : 10)
         .padding(.vertical, compact ? 3 : 6)
-        .background(.regularMaterial, in: Capsule())
-        .shadow(radius: 8, y: 2)
     }
 
     private func barButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
