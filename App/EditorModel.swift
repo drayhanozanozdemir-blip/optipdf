@@ -1,14 +1,25 @@
 import SwiftUI
 import PDFKit
+import NaturalLanguage
+import Translation
 
 enum EditorTool: String, CaseIterable, Identifiable {
-    case navigate, select, draw
+    case navigate, select, draw, text
     var id: String { rawValue }
     var title: String {
         switch self {
         case .navigate: return "Gez"
         case .select: return "Seç"
         case .draw: return "Çiz"
+        case .text: return "Yazı"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .navigate: return "hand.point.up.left"
+        case .select: return "character.cursor.ibeam"
+        case .draw: return "pencil.tip"
+        case .text: return "textformat"
         }
     }
 }
@@ -59,10 +70,21 @@ struct AIResult: Identifiable {
     let id = UUID()
     let title: String
     let source: String
-    var output: String?
-    var error: String?
-    /// Translated by Apple's on-device translation; the text never leaves the iPad.
+    let isTranslation: Bool
+    /// Apple's on-device translation only; the text never leaves the iPad.
     let onDevice: Bool
+    let engineName: String
+    var output = ""
+    /// Instant on-device translation shown until the server's text starts arriving.
+    var preview: String?
+    var streaming = false
+    var error: String?
+}
+
+struct TextPlacement: Identifiable {
+    let id = UUID()
+    let page: PDFPage
+    let point: CGPoint
 }
 
 /// One marking as the user made it: a highlight over several lines is several annotations with one timestamp.
@@ -86,30 +108,50 @@ enum ServiceError: LocalizedError {
     }
 }
 
-/// The OptiCeviri server: Fable or Astra behind the same complete-or-nothing endpoint the keyboard uses.
+/// The OptiCeviri server's streaming chat endpoint (Fable or Astra): text arrives piece by piece.
 struct OptiService {
     static let shared = OptiService()
     let baseURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "OptiCeviriBaseURL") as? String ?? "")
         ?? URL(string: "https://opticeviri-drayh.netlify.app")!
     let accessKey = Bundle.main.object(forInfoDictionaryKey: "OptiCeviriAccessKey") as? String ?? ""
 
-    func run(text: String, targetLanguage: String, model: String, instruction: String) async throws -> String {
-        guard !accessKey.isEmpty else { throw ServiceError.message("Sunucu anahtarı bu derlemede yok.") }
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/shortcut"), timeoutInterval: 90)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(accessKey, forHTTPHeaderField: "x-app-access-key")
-        request.httpBody = try JSONEncoder().encode(["text": text, "targetLanguage": targetLanguage,
-                                                     "model": model, "instruction": instruction])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        struct Reply: Decodable { let status: String; let text: String?; let error: String? }
-        guard let reply = try? JSONDecoder().decode(Reply.self, from: data) else {
-            throw ServiceError.message("Sunucu yanıtı okunamadı (\((response as? HTTPURLResponse)?.statusCode ?? 0)).")
+    func stream(text: String, targetLanguage: String, model: String, instruction: String) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    guard !accessKey.isEmpty else { throw ServiceError.message("Sunucu anahtarı bu derlemede yok.") }
+                    var request = URLRequest(url: baseURL.appendingPathComponent("api/chat"), timeoutInterval: 120)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.setValue(accessKey, forHTTPHeaderField: "x-app-access-key")
+                    let body: [String: Any] = [
+                        "model": model, "sourceLanguage": "auto", "targetLanguage": targetLanguage,
+                        "tone": "natural", "length": "balanced",
+                        "messages": [["role": "user", "text": instruction + "\n\n" + text]]
+                    ]
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    guard (200..<300).contains(status) else { throw ServiceError.message("Sunucu hatası (\(status)).") }
+                    for try await line in bytes.lines {
+                        guard let data = line.data(using: .utf8),
+                              let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                              let type = event["type"] as? String else { continue }
+                        if type == "text", let piece = event["text"] as? String {
+                            continuation.yield(piece)
+                        } else if type == "error" {
+                            throw ServiceError.message(event["message"] as? String ?? "Model hatası")
+                        } else if type == "done" {
+                            break
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
         }
-        guard reply.status == "ok", let output = reply.text, !output.isEmpty else {
-            throw ServiceError.message(reply.error ?? "Sunucu yanıt vermedi.")
-        }
-        return output
     }
 }
 
@@ -123,40 +165,76 @@ final class EditorModel: ObservableObject {
     @Published var result: AIResult?
     @Published var showNotes = false
     @Published var searchResults: [PDFSelection] = []
+    @Published var fullscreen = false
+    @Published var shapeSnap = false {
+        didSet { controller?.setShapeSnap(shapeSnap) }
+    }
+    @Published var textPlacement: TextPlacement?
+    @Published var toast: String?
     weak var controller: PDFEditorController?
+    private var streamTask: Task<Void, Never>?
 
     /// Apple Pencil Pro squeeze: straight between selecting text and drawing.
     func cycleSqueeze() {
         tool = tool == .draw ? .select : .draw
     }
 
+    func show(toast text: String) {
+        toast = text
+        Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            if self.toast == text { self.toast = nil }
+        }
+    }
+
     func run(_ action: AIAction, engine: String, target: String) {
         guard let controller else { return }
         let request = action.request(selection: selectionText ?? "", page: controller.currentPageText(), notes: markdownExport())
         let source = request.source.trimmingCharacters(in: .whitespacesAndNewlines)
+        streamTask?.cancel()
         guard !source.isEmpty else {
-            result = AIResult(title: request.title, source: "", output: nil,
-                              error: "Önce metin seç veya metni olan bir sayfaya git.", onDevice: false)
+            result = AIResult(title: request.title, source: "", isTranslation: false, onDevice: false, engineName: "",
+                              error: "Önce metin seç veya metni olan bir sayfaya git.")
             return
         }
         let onDevice = engine == "device"
-        var next = AIResult(title: request.title, source: source, output: nil, error: nil,
-                            onDevice: onDevice && request.isTranslation)
+        var next = AIResult(title: request.title, source: source, isTranslation: request.isTranslation, onDevice: onDevice,
+                            engineName: onDevice ? "Cihazda" : (engine == "astra" ? "Astra" : "Fable"))
         if onDevice && !request.isTranslation {
             next.error = "Cihazda modunda yalnızca çeviri çalışır. Açıklama, özet ve soru için Fable veya Astra seç."
         }
+        next.streaming = !onDevice
         result = next
         guard !onDevice else { return }
         let id = next.id
-        Task {
+        streamTask = Task {
             do {
-                let text = try await OptiService.shared.run(text: String(source.prefix(24_000)), targetLanguage: target,
-                                                            model: engine, instruction: request.instruction)
-                if self.result?.id == id { self.result?.output = text }
+                for try await piece in OptiService.shared.stream(text: String(source.prefix(24_000)), targetLanguage: target,
+                                                                 model: engine, instruction: request.instruction) {
+                    guard self.result?.id == id else { return }
+                    self.result?.output += piece
+                }
+                if self.result?.id == id { self.result?.streaming = false }
             } catch {
-                if self.result?.id == id { self.result?.error = error.localizedDescription }
+                guard self.result?.id == id, !Task.isCancelled else { return }
+                self.result?.streaming = false
+                self.result?.error = error.localizedDescription
             }
         }
+    }
+
+    static func deviceLanguageCode(_ target: String) -> String {
+        ["tr": "tr", "de-ch": "de", "gsw-zh": "de", "en": "en", "fr": "fr", "it": "it", "es": "es"][target] ?? "en"
+    }
+
+    /// A language pair already installed on this iPad, so the instant preview never asks to download anything.
+    static func installedPair(for text: String, target: String) async -> TranslationSession.Configuration? {
+        guard let detected = NLLanguageRecognizer.dominantLanguage(for: text) else { return nil }
+        let source = Locale.Language(identifier: detected.rawValue)
+        let destination = Locale.Language(identifier: deviceLanguageCode(target))
+        guard source.languageCode != destination.languageCode else { return nil }
+        let status = await LanguageAvailability().status(from: source, to: destination)
+        return status == .installed ? TranslationSession.Configuration(source: source, target: destination) : nil
     }
 
     func search(_ query: String) {
@@ -180,17 +258,21 @@ final class EditorModel: ObservableObject {
             for annotation in page.annotations {
                 let type = (annotation.type ?? "").replacingOccurrences(of: "/", with: "")
                 guard let kind = NoteItem.kinds[type] else { continue }
-                let quote = type == "Ink" ? "" :
-                    (page.selection(for: annotation.bounds)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                let quote: String
+                switch type {
+                case "Ink": quote = ""
+                case "FreeText": quote = annotation.contents ?? ""
+                default: quote = (page.selection(for: annotation.bounds)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                }
                 if var last = items.last, last.pageIndex == index, last.kind == kind,
                    let stamp = annotation.modificationDate, stamp == last.stamp {
                     last.pairs.append((page, annotation))
                     if !quote.isEmpty { last.quote += (last.quote.isEmpty ? "" : " ") + quote }
-                    if last.note.isEmpty { last.note = annotation.contents ?? "" }
+                    if last.note.isEmpty, type != "FreeText" { last.note = annotation.contents ?? "" }
                     items[items.count - 1] = last
                 } else {
                     items.append(NoteItem(pageIndex: index, kind: kind, stamp: annotation.modificationDate, quote: quote,
-                                          note: annotation.contents ?? "", pairs: [(page, annotation)]))
+                                          note: type == "FreeText" ? "" : (annotation.contents ?? ""), pairs: [(page, annotation)]))
                 }
             }
         }

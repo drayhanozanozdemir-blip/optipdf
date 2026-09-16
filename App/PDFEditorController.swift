@@ -20,9 +20,9 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
     }
 }
 
-/// PDFView plus the three pencil tools. Gez: pencil and fingers scroll. Seç: the pencil selects text at once
-/// while fingers scroll. Çiz: PencilKit on every page; strokes become standard ink annotations when leaving
-/// the tool, so Acrobat and Preview show them too.
+/// PDFView plus the pencil tools. Gez: pencil and fingers scroll. Seç: the pencil selects text at once while
+/// fingers scroll. Çiz: PencilKit on every page; strokes become standard ink annotations when leaving the tool,
+/// so Acrobat and Preview show them too. Yazı: a tap places a text box.
 final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
     let pdfView = PDFView()
     let document: PDFDocument
@@ -36,6 +36,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         gesture.minimumPressDuration = 0
         gesture.allowableMovement = .greatestFiniteMagnitude
         gesture.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        gesture.isEnabled = false
+        return gesture
+    }()
+    private lazy var textTap: UITapGestureRecognizer = {
+        let gesture = UITapGestureRecognizer(target: self, action: #selector(placeText(_:)))
         gesture.isEnabled = false
         return gesture
     }()
@@ -73,6 +78,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         pdfView.document = document
 
         pdfView.addGestureRecognizer(pencilSelect)
+        pdfView.addGestureRecognizer(textTap)
         let pencil = UIPencilInteraction()
         pencil.delegate = self
         view.addInteraction(pencil)
@@ -94,11 +100,17 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         toolPicker.setVisible(drawing, forFirstResponder: self)
         if drawing { becomeFirstResponder() }
         pencilSelect.isEnabled = newTool == .select
+        textTap.isEnabled = newTool == .text
         let direct = NSNumber(value: UITouch.TouchType.direct.rawValue)
         let pencil = NSNumber(value: UITouch.TouchType.pencil.rawValue)
         let pointer = NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
-        scrollView?.panGestureRecognizer.allowedTouchTypes = newTool == .navigate ? [direct, pencil, pointer] : [direct, pointer]
+        let pencilScrolls = newTool == .navigate || newTool == .text
+        scrollView?.panGestureRecognizer.allowedTouchTypes = pencilScrolls ? [direct, pencil, pointer] : [direct, pointer]
         if newTool == .draw { pdfView.clearSelection() }
+    }
+
+    func setShapeSnap(_ enabled: Bool) {
+        overlays.snapShapes = enabled
     }
 
     private var scrollView: UIScrollView? {
@@ -128,6 +140,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         default:
             selectionStart = nil
         }
+    }
+
+    @objc private func placeText(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: pdfView)
+        guard let page = pdfView.page(for: location, nearest: true) else { return }
+        model?.textPlacement = TextPlacement(page: page, point: pdfView.convert(location, to: page))
     }
 
     @objc private func selectionChanged() {
@@ -206,6 +224,31 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         clearSelection()
     }
 
+    /// A text box whose top-left corner is where the user tapped.
+    func addText(_ text: String, at point: CGPoint, on page: PDFPage, size: CGFloat, color: UIColor) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let font = UIFont.systemFont(ofSize: size)
+        let lines = trimmed.components(separatedBy: "\n")
+        let width = lines.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        let height = CGFloat(lines.count) * font.lineHeight + 6
+        let bounds = CGRect(x: point.x, y: point.y - height, width: width + 12, height: height)
+        add([(page, textAnnotation(trimmed, bounds: bounds, font: font, color: color))], actionName: "Yazı")
+    }
+
+    private func textAnnotation(_ text: String, bounds: CGRect, font: UIFont, color: UIColor) -> PDFAnnotation {
+        let annotation = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
+        annotation.contents = text
+        annotation.font = font
+        annotation.fontColor = color
+        annotation.color = .clear
+        let border = PDFBorder()
+        border.lineWidth = 0
+        annotation.border = border
+        annotation.modificationDate = Date()
+        return annotation
+    }
+
     func add(_ items: [(PDFPage, PDFAnnotation)], actionName: String) {
         guard !items.isEmpty else { return }
         for (page, annotation) in items { page.addAnnotation(annotation) }
@@ -237,6 +280,60 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         for (page, canvas) in overlays.canvases where canvas.window != nil {
             commit(page: page, canvas: canvas)
         }
+    }
+
+    /// Handwriting on the visible pages becomes typed text at the same place; rough shapes become clean ones.
+    func refine(text: Bool, shapes: Bool) {
+        let targets = overlays.canvases.filter { $0.value.window != nil && !$0.value.drawing.strokes.isEmpty }
+        guard !targets.isEmpty else {
+            model?.show(toast: "Düzeltilecek çizim yok. Önce Çiz ile yaz veya çiz.")
+            return
+        }
+        model?.show(toast: "Düzeltiliyor…")
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            var textLines = 0
+            var shapeCount = 0
+            for (page, canvas) in targets {
+                var strokes = canvas.drawing.strokes
+                var added: [(PDFPage, PDFAnnotation)] = []
+                if text {
+                    let lines = await HandwritingReader.read(PKDrawing(strokes: strokes), in: canvas.bounds)
+                    for line in lines {
+                        let trimmed = line.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.count >= 2 else { continue }
+                        let area = line.rect.insetBy(dx: -3, dy: -3)
+                        let covered = strokes.indices.filter { strokes[$0].renderBounds.intersects(area) }
+                        guard let first = covered.first else { continue }
+                        let color = strokes[first].ink.color
+                        added.append((page, self.typedLine(trimmed, canvasRect: line.rect, canvas: canvas, page: page, color: color)))
+                        for index in covered.reversed() { strokes.remove(at: index) }
+                        textLines += 1
+                    }
+                }
+                if shapes {
+                    strokes = strokes.map { stroke in
+                        guard let perfect = ShapeRecognizer.perfected(stroke) else { return stroke }
+                        shapeCount += 1
+                        return perfect
+                    }
+                }
+                canvas.drawing = PKDrawing(strokes: strokes)
+                self.add(added, actionName: "Düzelt")
+            }
+            self.model?.show(toast: "\(textLines) satır metne çevrildi, \(shapeCount) şekil düzeltildi.")
+        }
+    }
+
+    private func typedLine(_ text: String, canvasRect: CGRect, canvas: PKCanvasView, page: PDFPage, color: UIColor) -> PDFAnnotation {
+        let a = pdfView.convert(canvas.convert(CGPoint(x: canvasRect.minX, y: canvasRect.minY), to: pdfView), to: page)
+        let b = pdfView.convert(canvas.convert(CGPoint(x: canvasRect.maxX, y: canvasRect.maxY), to: pdfView), to: page)
+        let rect = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
+        let font = UIFont.systemFont(ofSize: max(8, rect.height * 0.72))
+        let width = max(rect.width, (text as NSString).size(withAttributes: [.font: font]).width + 8)
+        let height = max(rect.height, font.lineHeight + 4)
+        let bounds = CGRect(x: rect.minX, y: rect.maxY - height, width: width, height: height)
+        return textAnnotation(text, bounds: bounds, font: font, color: color)
     }
 
     /// Turns the page's PencilKit strokes into ink annotations in page space and clears the canvas.
@@ -282,12 +379,16 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
     }
 }
 
-/// One PencilKit canvas per page, shown by PDFKit above the page.
-final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider {
+/// One PencilKit canvas per page, shown by PDFKit above the page. In shape mode each finished stroke that
+/// looks like a line, arrow, triangle, rectangle or ellipse is replaced by the clean shape.
+final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewDelegate {
     private(set) var canvases: [PDFPage: PKCanvasView] = [:]
     weak var toolPicker: PKToolPicker?
     var onWillHide: ((PDFPage, PKCanvasView) -> Void)?
+    var snapShapes = false
     private var drawing = false
+    private var strokeCounts: [ObjectIdentifier: Int] = [:]
+    private var replacing = false
 
     func setDrawing(_ enabled: Bool) {
         drawing = enabled
@@ -306,12 +407,27 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider {
         if let canvas = overlayView as? PKCanvasView { onWillHide?(page, canvas) }
     }
 
+    func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+        let key = ObjectIdentifier(canvasView)
+        let strokes = canvasView.drawing.strokes
+        let previous = strokeCounts[key] ?? 0
+        strokeCounts[key] = strokes.count
+        guard snapShapes, !replacing, strokes.count == previous + 1, let last = strokes.last,
+              let perfect = ShapeRecognizer.perfected(last) else { return }
+        replacing = true
+        var updated = strokes
+        updated[updated.count - 1] = perfect
+        canvasView.drawing = PKDrawing(strokes: updated)
+        replacing = false
+    }
+
     private func makeCanvas() -> PKCanvasView {
         let canvas = PKCanvasView()
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
         canvas.drawingPolicy = .pencilOnly
         canvas.isScrollEnabled = false
+        canvas.delegate = self
         return canvas
     }
 }

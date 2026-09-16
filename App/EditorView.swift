@@ -22,13 +22,17 @@ struct EditorView: View {
 
     var body: some View {
         PDFEditorRepresentable(document: file.pdf, model: model, undoManager: undoManager)
-            .ignoresSafeArea(edges: .bottom)
+            .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
             .overlay(alignment: .bottom) {
                 if model.selectionText != nil { selectionBar.padding(.bottom, 24) }
             }
+            .overlay(alignment: .top) { topOverlays }
             .overlay(alignment: .topTrailing) {
-                if !model.searchResults.isEmpty { searchPanel.padding(12) }
+                if !model.searchResults.isEmpty && !model.fullscreen { searchPanel.padding(12) }
             }
+            .toolbar(model.fullscreen ? .hidden : .visible, for: .navigationBar)
+            .statusBarHidden(model.fullscreen)
+            .persistentSystemOverlays(model.fullscreen ? .hidden : .automatic)
             .toolbarRole(.editor)
             .toolbar { toolbarContent }
             .searchable(text: $searchText, placement: .toolbar, prompt: "PDF'te ara")
@@ -40,6 +44,11 @@ struct EditorView: View {
             }
             .sheet(item: $model.result) { _ in
                 ResultSheet(model: model, target: target)
+            }
+            .background {
+                Color.clear.sheet(item: $model.textPlacement) { placement in
+                    TextEntrySheet(model: model, placement: placement)
+                }
             }
             .alert("Soru sor", isPresented: $asking) {
                 TextField("Soru", text: $question)
@@ -70,7 +79,7 @@ struct EditorView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 240)
+            .frame(width: 300)
         }
         ToolbarItemGroup(placement: .primaryAction) {
             Menu {
@@ -103,7 +112,78 @@ struct EditorView: View {
             } label: {
                 Label("Ayarlar", systemImage: "gearshape")
             }
+            Button {
+                model.showNotes = false
+                model.fullscreen = true
+            } label: {
+                Label("Tam ekran", systemImage: "arrow.up.left.and.arrow.down.right")
+            }
         }
+    }
+
+    private var topOverlays: some View {
+        VStack(spacing: 8) {
+            if model.fullscreen { fullscreenBar }
+            if model.tool == .draw { drawBar }
+            if let toast = model.toast {
+                Text(toast)
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+            }
+        }
+        .padding(.top, model.fullscreen ? 14 : 8)
+    }
+
+    private var fullscreenBar: some View {
+        HStack(spacing: 2) {
+            ForEach(EditorTool.allCases) { tool in
+                Button { model.tool = tool } label: {
+                    Image(systemName: tool.symbol)
+                        .font(.system(size: 17, weight: .medium))
+                        .frame(width: 46, height: 36)
+                        .background(model.tool == tool ? Color.accentColor.opacity(0.22) : Color.clear,
+                                    in: RoundedRectangle(cornerRadius: 9))
+                }
+            }
+            Divider().frame(height: 24)
+            Button { model.fullscreen = false } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 46, height: 36)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(4)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(radius: 6, y: 2)
+    }
+
+    private var drawBar: some View {
+        HStack(spacing: 14) {
+            Toggle(isOn: $model.shapeSnap) {
+                Label("Şekil", systemImage: "circle.square")
+            }
+            .toggleStyle(.button)
+            Menu {
+                Button { model.controller?.refine(text: true, shapes: true) } label: {
+                    Label("Hepsini düzelt", systemImage: "wand.and.stars")
+                }
+                Button { model.controller?.refine(text: true, shapes: false) } label: {
+                    Label("El yazısını metne çevir", systemImage: "textformat")
+                }
+                Button { model.controller?.refine(text: false, shapes: true) } label: {
+                    Label("Şekilleri düzelt", systemImage: "triangle")
+                }
+            } label: {
+                Label("Düzelt", systemImage: "wand.and.stars")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(radius: 6, y: 2)
     }
 
     private var selectionBar: some View {
@@ -170,12 +250,6 @@ struct ResultSheet: View {
     @ObservedObject var model: EditorModel
     let target: String
     @State private var configuration: TranslationSession.Configuration?
-    @State private var deviceText: String?
-    @State private var deviceError: String?
-
-    private var deviceLanguage: String {
-        ["tr": "tr", "de-ch": "de", "gsw-zh": "de", "en": "en", "fr": "fr", "it": "it", "es": "es"][target] ?? "en"
-    }
 
     var body: some View {
         NavigationStack {
@@ -190,17 +264,24 @@ struct ResultSheet: View {
                                 .textSelection(.enabled)
                             Divider()
                         }
-                        if let text = result.onDevice ? deviceText : result.output {
-                            Text(text).font(.body).textSelection(.enabled)
-                        } else if let error = result.onDevice ? deviceError : result.error {
+                        if !result.output.isEmpty {
+                            Text(result.output).font(.body).textSelection(.enabled)
+                            if result.streaming { ProgressView().controlSize(.small) }
+                        } else if let preview = result.preview {
+                            Text(preview).font(.body).foregroundStyle(.secondary).textSelection(.enabled)
+                            Label("Anında ön çeviri (cihazda) · \(result.engineName) yazıyor…", systemImage: "bolt.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let error = result.error {
                             Text(error).foregroundStyle(.red)
-                        } else {
+                        } else if result.output.isEmpty && result.preview == nil {
                             HStack(spacing: 10) {
                                 ProgressView()
-                                Text(result.onDevice ? "Cihazda çevriliyor…" : "Yapay zekâ çalışıyor…").foregroundStyle(.secondary)
+                                Text(result.onDevice ? "Cihazda çevriliyor…" : "\(result.engineName) yazıyor…").foregroundStyle(.secondary)
                             }
                         }
-                        if result.onDevice {
+                        if result.onDevice && !result.output.isEmpty {
                             Label("Metin iPad'den çıkmadı.", systemImage: "lock.shield").font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -213,27 +294,89 @@ struct ResultSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Kopyala") {
-                        let text = (model.result?.onDevice == true ? deviceText : model.result?.output) ?? ""
-                        UIPasteboard.general.string = text
+                        UIPasteboard.general.string = model.result?.output
                     }
-                    .disabled(((model.result?.onDevice == true ? deviceText : model.result?.output) ?? "").isEmpty)
+                    .disabled((model.result?.output ?? "").isEmpty)
                 }
             }
         }
         .presentationDetents([.medium, .large])
         .translationTask(configuration) { session in
-            guard let source = model.result?.source else { return }
+            guard let result = model.result else { return }
             do {
-                deviceText = try await session.translate(source).targetText
+                let text = try await session.translate(result.source).targetText
+                guard model.result?.id == result.id else { return }
+                if result.onDevice {
+                    model.result?.output = text
+                } else if model.result?.output.isEmpty == true {
+                    model.result?.preview = text
+                }
             } catch {
-                deviceError = "Cihazda çeviri yapılamadı: \(error.localizedDescription)"
+                if result.onDevice, model.result?.id == result.id {
+                    model.result?.error = "Cihazda çeviri yapılamadı: \(error.localizedDescription)"
+                }
             }
         }
-        .onAppear {
-            if model.result?.onDevice == true {
-                configuration = TranslationSession.Configuration(source: nil, target: Locale.Language(identifier: deviceLanguage))
+        .task(id: model.result?.id) {
+            guard let result = model.result, result.isTranslation, result.error == nil else { return }
+            if result.onDevice {
+                configuration = TranslationSession.Configuration(source: nil, target: Locale.Language(identifier: EditorModel.deviceLanguageCode(target)))
+            } else if let pair = await EditorModel.installedPair(for: result.source, target: target) {
+                configuration = pair
             }
         }
+    }
+}
+
+struct TextEntrySheet: View {
+    @ObservedObject var model: EditorModel
+    let placement: TextPlacement
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+    @State private var size: CGFloat = 16
+    @State private var colorName = "Siyah"
+    private let colors: [(name: String, color: UIColor)] = [("Siyah", .black), ("Mavi", .systemBlue), ("Kırmızı", .systemRed), ("Yeşil", .systemGreen)]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Kalemle doğrudan yazabilirsin, yazın metne döner") {
+                    TextEditor(text: $text)
+                        .font(.system(size: size))
+                        .frame(minHeight: 150)
+                }
+                Section {
+                    Picker("Boyut", selection: $size) {
+                        Text("Küçük").tag(CGFloat(12))
+                        Text("Orta").tag(CGFloat(16))
+                        Text("Büyük").tag(CGFloat(22))
+                    }
+                    .pickerStyle(.segmented)
+                    Picker("Renk", selection: $colorName) {
+                        ForEach(colors, id: \.name) { item in
+                            Text(item.name).tag(item.name)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+            .navigationTitle("Yazı ekle")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Vazgeç") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Ekle") {
+                        let color = colors.first { $0.name == colorName }?.color ?? .black
+                        model.controller?.addText(text, at: placement.point, on: placement.page, size: size, color: color)
+                        dismiss()
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 
