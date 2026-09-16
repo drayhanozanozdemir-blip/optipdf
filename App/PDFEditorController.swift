@@ -111,7 +111,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     private var keyboardNavigationAvailable: Bool {
         guard let window = viewIfLoaded?.window, model?.showNotes != true else { return false }
         func editingText(in view: UIView) -> Bool {
-            if view.isFirstResponder && view is UITextInput { return true }
+            if view.isFirstResponder {
+                if let textView = view as? UITextView { return textView.isEditable }
+                if view is UITextField { return true }
+                if view is UITextInput && !view.isDescendant(of: pdfView) { return true }
+            }
             return view.subviews.contains(where: editingText)
         }
         guard !editingText(in: window) else { return false }
