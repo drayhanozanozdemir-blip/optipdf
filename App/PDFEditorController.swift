@@ -6,11 +6,13 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
     let document: PDFDocument
     let model: EditorModel
     let undoManager: UndoManager?
+    let title: String
 
     func makeUIViewController(context: Context) -> PDFEditorController {
         let controller = PDFEditorController(document: document)
         controller.model = model
         controller.undo = undoManager
+        controller.exportName = title
         model.controller = controller
         return controller
     }
@@ -20,17 +22,29 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
     }
 }
 
-/// PDFView plus the pencil tools. Gez: pencil and fingers scroll. Seç: the pencil selects text at once while
-/// fingers scroll. Çiz: PencilKit on every page; strokes become standard ink annotations when leaving the tool,
-/// so Acrobat and Preview show them too. Yazı: a tap places a text box.
+/// PDFView plus the pencil tools. Çiz (default): the pencil draws with PencilKit, fingers scroll. Seç: the pencil
+/// selects text at once. Gez: pencil and fingers scroll. Yazı: a tap places a text box.
 final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
     let pdfView = PDFView()
     let document: PDFDocument
     weak var model: EditorModel?
     var undo: UndoManager?
+    var exportName = "OptiPDF"
 
     private let overlays = DrawingOverlays()
-    private let toolPicker = PKToolPicker()
+    private let toolPicker = PKToolPicker(toolItems: [
+        PKToolPickerInkingItem(type: .pen),
+        PKToolPickerInkingItem(type: .fountainPen),
+        PKToolPickerInkingItem(type: .pencil),
+        PKToolPickerInkingItem(type: .monoline),
+        PKToolPickerInkingItem(type: .marker),
+        PKToolPickerInkingItem(type: .watercolor),
+        PKToolPickerInkingItem(type: .crayon),
+        PKToolPickerEraserItem(type: .vector),
+        PKToolPickerEraserItem(type: .bitmap),
+        PKToolPickerLassoItem(),
+        PKToolPickerRulerItem()
+    ])
     private lazy var pencilSelect: UILongPressGestureRecognizer = {
         let gesture = UILongPressGestureRecognizer(target: self, action: #selector(pencilSelecting(_:)))
         gesture.minimumPressDuration = 0
@@ -45,7 +59,9 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         return gesture
     }()
     private var selectionStart: (page: PDFPage, point: CGPoint)?
-    private var tool: EditorTool = .navigate
+    private var tool: EditorTool = .draw
+    private var observations: [NSKeyValueObservation] = []
+    private var frameUpdatePending = false
 
     init(document: PDFDocument) {
         self.document = document
@@ -67,13 +83,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
             pdfView.topAnchor.constraint(equalTo: view.topAnchor),
             pdfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
-        pdfView.displayMode = .singlePageContinuous
-        pdfView.displayDirection = .vertical
-        pdfView.autoScales = true
         pdfView.backgroundColor = .secondarySystemBackground
+        toolPicker.showsDrawingPolicyControls = false
         // The overlay provider must be in place before the document is set.
         overlays.toolPicker = toolPicker
-        overlays.onWillHide = { [weak self] page, canvas in self?.commit(page: page, canvas: canvas) }
+        overlays.load(document)
+        overlays.onChange = { [weak self] page, previous, updated in self?.drawingChanged(page, from: previous, to: updated) }
         pdfView.pageOverlayViewProvider = overlays
         pdfView.document = document
 
@@ -85,15 +100,22 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
 
         NotificationCenter.default.addObserver(self, selector: #selector(selectionChanged),
                                                name: .PDFViewSelectionChanged, object: pdfView)
-        apply(tool: tool)
-        DispatchQueue.main.async { [weak self] in self?.model?.reloadNotes() }
+        NotificationCenter.default.addObserver(self, selector: #selector(pageChanged),
+                                               name: .PDFViewPageChanged, object: pdfView)
+        applyDisplay(model?.displayMode ?? "continuous")
+        apply(tool: model?.tool ?? tool, force: true)
+        DispatchQueue.main.async { [weak self] in
+            self?.model?.reloadNotes()
+            self?.pageChanged()
+        }
     }
 
-    // MARK: Tools
+    // MARK: Tools and display
 
-    func apply(tool newTool: EditorTool) {
-        if tool == .draw && newTool != .draw { commitDrawings() }
+    func apply(tool newTool: EditorTool, force: Bool = false) {
+        guard force || newTool != tool else { return }
         tool = newTool
+        guard isViewLoaded else { return }
         let drawing = newTool == .draw
         pdfView.isInMarkupMode = drawing
         overlays.setDrawing(drawing)
@@ -106,7 +128,27 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         let pointer = NSNumber(value: UITouch.TouchType.indirectPointer.rawValue)
         let pencilScrolls = newTool == .navigate || newTool == .text
         scrollView?.panGestureRecognizer.allowedTouchTypes = pencilScrolls ? [direct, pencil, pointer] : [direct, pointer]
-        if newTool == .draw { pdfView.clearSelection() }
+        if drawing { clearSelection() }
+    }
+
+    func applyDisplay(_ mode: String) {
+        switch mode {
+        case "page":
+            pdfView.displayMode = .singlePage
+            pdfView.displayDirection = .horizontal
+            pdfView.usePageViewController(true, withViewOptions: nil)
+        case "twoUp":
+            pdfView.usePageViewController(false, withViewOptions: nil)
+            pdfView.displayMode = .twoUpContinuous
+            pdfView.displayDirection = .vertical
+        default:
+            pdfView.usePageViewController(false, withViewOptions: nil)
+            pdfView.displayMode = .singlePageContinuous
+            pdfView.displayDirection = .vertical
+        }
+        pdfView.autoScales = true
+        observeScrolling()
+        apply(tool: tool, force: true)
     }
 
     func setShapeSnap(_ enabled: Bool) {
@@ -122,6 +164,35 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
             return nil
         }
         return find(pdfView)
+    }
+
+    private func observeScrolling() {
+        observations.removeAll()
+        guard let scroll = scrollView else { return }
+        observations.append(scroll.observe(\.contentOffset) { [weak self] _, _ in self?.scheduleSelectionFrame() })
+        observations.append(scroll.observe(\.zoomScale) { [weak self] _, _ in self?.scheduleSelectionFrame() })
+    }
+
+    private func scheduleSelectionFrame() {
+        guard !frameUpdatePending else { return }
+        frameUpdatePending = true
+        DispatchQueue.main.async { [weak self] in
+            self?.frameUpdatePending = false
+            self?.updateSelectionFrame()
+        }
+    }
+
+    /// Where the selection is on screen, so the action bar can float next to it while the page scrolls.
+    private func updateSelectionFrame() {
+        guard model?.selectionText != nil, let selection = pdfView.currentSelection else {
+            if model?.selectionFrame != nil { model?.selectionFrame = nil }
+            return
+        }
+        var frame = CGRect.null
+        for page in selection.pages {
+            frame = frame.union(pdfView.convert(selection.bounds(for: page), from: page))
+        }
+        model?.selectionFrame = frame.isNull ? nil : frame
     }
 
     @objc private func pencilSelecting(_ gesture: UILongPressGestureRecognizer) {
@@ -151,11 +222,19 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
     @objc private func selectionChanged() {
         let text = pdfView.currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines)
         model?.selectionText = (text?.isEmpty == false) ? text : nil
+        updateSelectionFrame()
+    }
+
+    @objc private func pageChanged() {
+        model?.pageCount = document.pageCount
+        guard let page = pdfView.currentPage else { return }
+        model?.currentPage = document.index(for: page)
     }
 
     func clearSelection() {
         pdfView.clearSelection()
         model?.selectionText = nil
+        model?.selectionFrame = nil
     }
 
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
@@ -169,7 +248,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         model?.tool = tool == .select ? .navigate : .select
     }
 
-    // MARK: Text and pages
+    // MARK: Text and navigation
 
     func currentPageText() -> String { pdfView.currentPage?.string ?? "" }
 
@@ -192,9 +271,90 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         pdfView.go(to: annotation.bounds, on: page)
     }
 
+    func go(to destination: PDFDestination) { pdfView.go(to: destination) }
+
+    func goToPage(_ index: Int) {
+        guard let page = document.page(at: index) else { return }
+        pdfView.go(to: page)
+    }
+
     func pageNumber(of selection: PDFSelection) -> Int {
         guard let page = selection.pages.first else { return 0 }
         return document.index(for: page) + 1
+    }
+
+    // MARK: Pages
+
+    private func allPages() -> [PDFPage] { (0..<document.pageCount).compactMap { document.page(at: $0) } }
+
+    func movePages(from source: IndexSet, to destination: Int) {
+        let previous = allPages()
+        var pages = previous
+        pages.move(fromOffsets: source, toOffset: destination)
+        setPages(pages, previous: previous, actionName: "Sayfa taşı")
+    }
+
+    func deletePages(_ offsets: IndexSet) {
+        let previous = allPages()
+        var pages = previous
+        pages.remove(atOffsets: offsets)
+        guard !pages.isEmpty else {
+            model?.show(toast: "Son sayfa silinemez.")
+            return
+        }
+        setPages(pages, previous: previous, actionName: "Sayfa sil")
+    }
+
+    func duplicatePage(_ index: Int) {
+        guard let page = document.page(at: index), let copy = page.copy() as? PDFPage else { return }
+        overlays.load(copy)
+        let previous = allPages()
+        var pages = previous
+        pages.insert(copy, at: index + 1)
+        setPages(pages, previous: previous, actionName: "Sayfa çoğalt")
+    }
+
+    func insertBlankPage(after index: Int) {
+        let size = document.page(at: index).map { DrawingStorage.displaySize(of: $0) } ?? CGSize(width: 595, height: 842)
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        guard let blank = PDFPage(image: image) else { return }
+        let previous = allPages()
+        var pages = previous
+        pages.insert(blank, at: min(index + 1, pages.count))
+        setPages(pages, previous: previous, actionName: "Boş sayfa")
+    }
+
+    func rotatePage(_ index: Int, by degrees: Int) {
+        guard let page = document.page(at: index) else { return }
+        setRotation(of: page, to: (page.rotation + degrees + 360) % 360)
+    }
+
+    private func setRotation(of page: PDFPage, to rotation: Int) {
+        let old = page.rotation
+        page.rotation = rotation
+        undo?.registerUndo(withTarget: self) { controller in controller.setRotation(of: page, to: old) }
+        undo?.setActionName("Sayfa döndür")
+        pagesChanged()
+    }
+
+    private func setPages(_ pages: [PDFPage], previous: [PDFPage], actionName: String) {
+        var first = 0
+        while first < min(pages.count, previous.count), pages[first] === previous[first] { first += 1 }
+        for _ in first..<previous.count { document.removePage(at: first) }
+        for index in first..<pages.count { document.insert(pages[index], at: index) }
+        undo?.registerUndo(withTarget: self) { controller in controller.setPages(previous, previous: pages, actionName: actionName) }
+        undo?.setActionName(actionName)
+        pagesChanged()
+    }
+
+    private func pagesChanged() {
+        pdfView.layoutDocumentView()
+        model?.pageRevision += 1
+        model?.reloadNotes()
+        pageChanged()
     }
 
     // MARK: Annotations
@@ -276,17 +436,24 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
 
     // MARK: Drawing
 
-    func commitDrawings() {
-        for (page, canvas) in overlays.canvases where canvas.window != nil {
-            commit(page: page, canvas: canvas)
-        }
+    private func drawingChanged(_ page: PDFPage, from previous: PKDrawing, to updated: PKDrawing) {
+        DrawingStorage.save(updated, on: page)
+        undo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(previous, replacing: updated, on: page) }
+        undo?.setActionName("Çizim")
+    }
+
+    private func restoreDrawing(_ drawing: PKDrawing, replacing current: PKDrawing, on page: PDFPage) {
+        overlays.replace(drawing, for: page)
+        DrawingStorage.save(drawing, on: page)
+        undo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(current, replacing: drawing, on: page) }
+        undo?.setActionName("Çizim")
     }
 
     /// Handwriting on the visible pages becomes typed text at the same place; rough shapes become clean ones.
     func refine(text: Bool, shapes: Bool) {
         let targets = overlays.canvases.filter { $0.value.window != nil && !$0.value.drawing.strokes.isEmpty }
         guard !targets.isEmpty else {
-            model?.show(toast: "Düzeltilecek çizim yok. Önce Çiz ile yaz veya çiz.")
+            model?.show(toast: "Düzeltilecek çizim yok. Önce kalemle yaz veya çiz.")
             return
         }
         model?.show(toast: "Düzeltiliyor…")
@@ -336,98 +503,43 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate {
         return textAnnotation(text, bounds: bounds, font: font, color: color)
     }
 
-    /// Turns the page's PencilKit strokes into ink annotations in page space and clears the canvas.
-    private func commit(page: PDFPage, canvas: PKCanvasView) {
-        let strokes = canvas.drawing.strokes
-        guard !strokes.isEmpty, canvas.window != nil else { return }
-        let pageBounds = page.bounds(for: .mediaBox)
-        let scale = pageScale(canvas: canvas, page: page)
-        let stamp = Date()
-        var added: [(PDFPage, PDFAnnotation)] = []
-        for stroke in strokes {
-            let path = UIBezierPath()
-            var widthSum: CGFloat = 0
-            var count = 0
-            for point in stroke.path.interpolatedPoints(by: .distance(2)) {
-                let local = point.location.applying(stroke.transform)
-                let inPage = pdfView.convert(canvas.convert(local, to: pdfView), to: page)
-                let relative = CGPoint(x: inPage.x - pageBounds.minX, y: inPage.y - pageBounds.minY)
-                if count == 0 { path.move(to: relative) } else { path.addLine(to: relative) }
-                widthSum += point.size.width
-                count += 1
-            }
-            guard count > 0 else { continue }
-            if count == 1 { path.addLine(to: path.currentPoint) }
-            let annotation = PDFAnnotation(bounds: pageBounds, forType: .ink, withProperties: nil)
-            let border = PDFBorder()
-            border.lineWidth = max(0.5, widthSum / CGFloat(count) * scale)
-            annotation.border = border
-            annotation.color = stroke.ink.inkType == .marker ? stroke.ink.color.withAlphaComponent(0.35) : stroke.ink.color
-            annotation.modificationDate = stamp
-            annotation.add(path)
-            added.append((page, annotation))
+    // MARK: Export
+
+    /// A copy with every drawing burned into its page, for Files, Mail, Acrobat and other apps.
+    func exportFlattened() {
+        guard let data = document.dataRepresentation(), let copy = PDFDocument(data: data) else {
+            model?.show(toast: "Dışa aktarılamadı.")
+            return
         }
-        canvas.drawing = PKDrawing()
-        add(added, actionName: "Çizim")
-    }
-
-    private func pageScale(canvas: PKCanvasView, page: PDFPage) -> CGFloat {
-        let a = pdfView.convert(canvas.convert(CGPoint.zero, to: pdfView), to: page)
-        let b = pdfView.convert(canvas.convert(CGPoint(x: 100, y: 0), to: pdfView), to: page)
-        let distance = hypot(b.x - a.x, b.y - a.y)
-        return distance > 0 ? distance / 100 : 1
-    }
-}
-
-/// One PencilKit canvas per page, shown by PDFKit above the page. In shape mode each finished stroke that
-/// looks like a line, arrow, triangle, rectangle or ellipse is replaced by the clean shape.
-final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewDelegate {
-    private(set) var canvases: [PDFPage: PKCanvasView] = [:]
-    weak var toolPicker: PKToolPicker?
-    var onWillHide: ((PDFPage, PKCanvasView) -> Void)?
-    var snapShapes = false
-    private var drawing = false
-    private var strokeCounts: [ObjectIdentifier: Int] = [:]
-    private var replacing = false
-
-    func setDrawing(_ enabled: Bool) {
-        drawing = enabled
-        for canvas in canvases.values { canvas.isUserInteractionEnabled = enabled }
-    }
-
-    func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
-        let canvas = canvases[page] ?? makeCanvas()
-        canvases[page] = canvas
-        canvas.isUserInteractionEnabled = drawing
-        toolPicker?.addObserver(canvas)
-        return canvas
-    }
-
-    func pdfView(_ pdfView: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
-        if let canvas = overlayView as? PKCanvasView { onWillHide?(page, canvas) }
-    }
-
-    func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-        let key = ObjectIdentifier(canvasView)
-        let strokes = canvasView.drawing.strokes
-        let previous = strokeCounts[key] ?? 0
-        strokeCounts[key] = strokes.count
-        guard snapShapes, !replacing, strokes.count == previous + 1, let last = strokes.last,
-              let perfect = ShapeRecognizer.perfected(last) else { return }
-        replacing = true
-        var updated = strokes
-        updated[updated.count - 1] = perfect
-        canvasView.drawing = PKDrawing(strokes: updated)
-        replacing = false
-    }
-
-    private func makeCanvas() -> PKCanvasView {
-        let canvas = PKCanvasView()
-        canvas.backgroundColor = .clear
-        canvas.isOpaque = false
-        canvas.drawingPolicy = .pencilOnly
-        canvas.isScrollEnabled = false
-        canvas.delegate = self
-        return canvas
+        for index in 0..<copy.pageCount {
+            guard let page = copy.page(at: index), let original = document.page(at: index) else { continue }
+            for annotation in page.annotations where DrawingStorage.isStorage(annotation) {
+                page.removeAnnotation(annotation)
+            }
+            guard let drawing = overlays.drawing(for: original), !drawing.strokes.isEmpty else { continue }
+            let size = DrawingStorage.displaySize(of: page)
+            var image: UIImage?
+            UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
+                image = drawing.image(from: CGRect(origin: .zero, size: size), scale: 3)
+            }
+            let annotation = DrawingImageAnnotation(bounds: page.bounds(for: .cropBox), forType: .stamp, withProperties: nil)
+            annotation.image = image
+            page.addAnnotation(annotation)
+        }
+        guard let flattened = copy.dataRepresentation(options: [PDFDocumentWriteOption.burnInAnnotationsOption: true]) else {
+            model?.show(toast: "Dışa aktarılamadı.")
+            return
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(exportName + " (OptiPDF).pdf")
+        do {
+            try flattened.write(to: url, options: .atomic)
+        } catch {
+            model?.show(toast: "Dışa aktarılamadı.")
+            return
+        }
+        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.maxX - 80, y: 0, width: 1, height: 1)
+        present(sheet, animated: true)
     }
 }

@@ -157,8 +157,21 @@ struct OptiService {
 
 @MainActor
 final class EditorModel: ObservableObject {
-    @Published var tool: EditorTool = .navigate {
-        didSet { if oldValue != tool { controller?.apply(tool: tool) } }
+    @Published var tool: EditorTool = EditorTool(rawValue: UserDefaults.standard.string(forKey: "lastTool") ?? "") ?? .draw {
+        didSet {
+            UserDefaults.standard.set(tool.rawValue, forKey: "lastTool")
+            if oldValue != tool { controller?.apply(tool: tool) }
+        }
+    }
+    @Published var selectionFrame: CGRect?
+    @Published var pageCount = 0
+    @Published var currentPage = 0
+    @Published var pageRevision = 0
+    @Published var displayMode = UserDefaults.standard.string(forKey: "displayMode") ?? "continuous" {
+        didSet {
+            UserDefaults.standard.set(displayMode, forKey: "displayMode")
+            if oldValue != displayMode { controller?.applyDisplay(displayMode) }
+        }
     }
     @Published var selectionText: String?
     @Published var notes: [NoteItem] = []
@@ -255,7 +268,7 @@ final class EditorModel: ObservableObject {
         var items: [NoteItem] = []
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
-            for annotation in page.annotations {
+            for annotation in page.annotations where !DrawingStorage.isStorage(annotation) {
                 let type = (annotation.type ?? "").replacingOccurrences(of: "/", with: "")
                 guard let kind = NoteItem.kinds[type] else { continue }
                 let quote: String

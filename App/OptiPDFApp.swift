@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 struct OptiPDFApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: { PDFFile() }) { configuration in
-            EditorView(file: configuration.document)
+            EditorView(file: configuration.document,
+                       title: configuration.fileURL?.deletingPathExtension().lastPathComponent ?? "OptiPDF")
         }
     }
 }

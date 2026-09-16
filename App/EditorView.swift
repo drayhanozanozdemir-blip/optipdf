@@ -4,9 +4,9 @@ import Translation
 
 struct EditorView: View {
     @ObservedObject var file: PDFFile
+    let title: String
     @StateObject private var model = EditorModel()
     @Environment(\.undoManager) private var undoManager
-    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("targetLanguage") private var target = "tr"
     @AppStorage("engine") private var engine = "fable"
     @State private var searchText = ""
@@ -14,6 +14,8 @@ struct EditorView: View {
     @State private var asking = false
     @State private var noteDraft = ""
     @State private var addingNote = false
+    @State private var showPages = false
+    @State private var showOutline = false
 
     static let languages: [(code: String, name: String)] = [
         ("tr", "Türkçe"), ("de-ch", "Deutsch (CH)"), ("gsw-zh", "Züritüütsch"), ("en", "English"),
@@ -21,12 +23,15 @@ struct EditorView: View {
     ]
 
     var body: some View {
-        PDFEditorRepresentable(document: file.pdf, model: model, undoManager: undoManager)
+        PDFEditorRepresentable(document: file.pdf, model: model, undoManager: undoManager, title: title)
             .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
-            .overlay(alignment: .bottom) {
-                if model.selectionText != nil { selectionBar.padding(.bottom, 24) }
+            .overlay {
+                GeometryReader { proxy in
+                    if model.selectionText != nil { floatingSelectionBar(in: proxy.size) }
+                }
             }
             .overlay(alignment: .top) { topOverlays }
+            .overlay(alignment: .bottomLeading) { pageIndicator }
             .overlay(alignment: .topTrailing) {
                 if !model.searchResults.isEmpty && !model.fullscreen { searchPanel.padding(12) }
             }
@@ -46,8 +51,16 @@ struct EditorView: View {
                 ResultSheet(model: model, target: target)
             }
             .background {
-                Color.clear.sheet(item: $model.textPlacement) { placement in
-                    TextEntrySheet(model: model, placement: placement)
+                ZStack {
+                    Color.clear.sheet(item: $model.textPlacement) { placement in
+                        TextEntrySheet(model: model, placement: placement)
+                    }
+                    Color.clear.sheet(isPresented: $showPages) {
+                        PageOrganizerSheet(model: model)
+                    }
+                    Color.clear.sheet(isPresented: $showOutline) {
+                        OutlineSheet(model: model)
+                    }
                 }
             }
             .alert("Soru sor", isPresented: $asking) {
@@ -64,9 +77,6 @@ struct EditorView: View {
                     noteDraft = ""
                 }
                 Button("Vazgeç", role: .cancel) { noteDraft = "" }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase != .active { model.controller?.commitDrawings() }
             }
     }
 
@@ -98,7 +108,21 @@ struct EditorView: View {
             Button { model.showNotes.toggle() } label: {
                 Label("Notlar", systemImage: "note.text")
             }
+            Button { showOutline = true } label: {
+                Label("İçindekiler", systemImage: "list.bullet.indent")
+            }
+            Button { showPages = true } label: {
+                Label("Sayfalar", systemImage: "square.grid.2x2")
+            }
+            Button { model.controller?.exportFlattened() } label: {
+                Label("Dışa aktar", systemImage: "square.and.arrow.up")
+            }
             Menu {
+                Picker("Görünüm", selection: $model.displayMode) {
+                    Text("Sürekli kaydır").tag("continuous")
+                    Text("Sayfa sayfa çevir").tag("page")
+                    Text("İki sayfa").tag("twoUp")
+                }
                 Picker("Hedef dil", selection: $target) {
                     ForEach(Self.languages, id: \.code) { language in
                         Text(language.name).tag(language.code)
@@ -134,6 +158,21 @@ struct EditorView: View {
             }
         }
         .padding(.top, model.fullscreen ? 14 : 8)
+    }
+
+    @ViewBuilder
+    private var pageIndicator: some View {
+        if model.pageCount > 0 && model.selectionText == nil {
+            Button { showPages = true } label: {
+                Text("\(model.currentPage + 1) / \(model.pageCount)")
+                    .font(.callout.monospacedDigit())
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .padding(16)
+        }
     }
 
     private var fullscreenBar: some View {
@@ -186,6 +225,22 @@ struct EditorView: View {
         .shadow(radius: 6, y: 2)
     }
 
+    /// The action bar floats just above the selection (below it near the top edge) and follows it while scrolling.
+    private func floatingSelectionBar(in size: CGSize) -> some View {
+        let barWidth: CGFloat = 540
+        let barHeight: CGFloat = 58
+        let halfWidth = barWidth / 2 + 12
+        let midX = model.selectionFrame?.midX ?? size.width / 2
+        let x = min(max(midX, halfWidth), max(halfWidth, size.width - halfWidth))
+        var y = size.height - barHeight / 2 - 24
+        if let frame = model.selectionFrame {
+            let above = frame.minY - barHeight / 2 - 16
+            let below = frame.maxY + barHeight / 2 + 16
+            y = above > barHeight / 2 + 70 ? above : min(below, size.height - barHeight / 2 - 12)
+        }
+        return selectionBar.position(x: x, y: y)
+    }
+
     private var selectionBar: some View {
         HStack(spacing: 4) {
             barButton("Çevir", "character.bubble") { model.run(.translate, engine: engine, target: target) }
@@ -193,6 +248,7 @@ struct EditorView: View {
             Divider().frame(height: 28)
             barButton("Vurgula", "highlighter") { model.controller?.markSelection(.highlight) }
             barButton("Altını çiz", "underline") { model.controller?.markSelection(.underline) }
+            barButton("Üstünü çiz", "strikethrough") { model.controller?.markSelection(.strikeOut) }
             barButton("Not", "note.text.badge.plus") { addingNote = true }
             barButton("Kopyala", "doc.on.doc") {
                 UIPasteboard.general.string = model.selectionText
@@ -212,7 +268,7 @@ struct EditorView: View {
                 Image(systemName: symbol).font(.system(size: 17, weight: .medium))
                 Text(title).font(.caption2)
             }
-            .frame(minWidth: 58, minHeight: 44)
+            .frame(minWidth: 56, minHeight: 44)
         }
         .buttonStyle(.plain)
     }
@@ -406,7 +462,7 @@ struct NotesPanel: View {
                 .buttonStyle(.borderless)
             }
             if model.notes.isEmpty {
-                Text("Henüz not yok. Seç ile metni işaretle, Vurgula veya Not ekle; Çiz ile yaz.")
+                Text("Henüz not yok. Seç ile metni işaretle, Vurgula veya Not ekle.")
                     .foregroundStyle(.secondary)
             }
             ForEach(model.notes) { item in
