@@ -44,7 +44,7 @@ jobs:
           xcodegen generate
       - name: Run iPad UI probe
         if: inputs.probe_source != ''
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           set -eo pipefail
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for group in devices.values() for device in group if "iPad" in device["name"]))')
@@ -54,6 +54,12 @@ jobs:
             -destination "platform=iOS Simulator,id=$DEVICE" CODE_SIGNING_ALLOWED=NO SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG READER_PROBE" \
             -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/ReaderProbe.xcresult" \
             2>&1 | tee "$RUNNER_TEMP/reader-probe.log" | grep -E 'error:|warning:|Test Case|Executed|TEST'
+      - name: Export iPad screenshots
+        if: always() && inputs.probe_source != ''
+        run: |
+          if [ -f "$RUNNER_TEMP/ReaderProbe.xcresult/Info.plist" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/ReaderProbe.xcresult" --output-path "$RUNNER_TEMP/reader-screenshots"
+          fi
       - name: Upload iPad probe evidence
         if: always() && inputs.probe_source != ''
         uses: actions/upload-artifact@v4
@@ -62,6 +68,7 @@ jobs:
           path: |
             ${{ runner.temp }}/ReaderProbe.xcresult
             ${{ runner.temp }}/reader-probe.log
+            ${{ runner.temp }}/reader-screenshots
           retention-days: 3
       - name: Restore release project
         if: inputs.probe_source != ''
