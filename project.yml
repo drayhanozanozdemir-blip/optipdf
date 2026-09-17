@@ -47,6 +47,18 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         ITSAppUsesNonExemptEncryption: false
+        # Notes, drawings and bookmarks live in the iCloud container; Files shows it as "OptiPDF".
+        NSUbiquitousContainers:
+          iCloud.ch.ozan.optipdf:
+            NSUbiquitousContainerIsDocumentScopePublic: true
+            NSUbiquitousContainerName: OptiPDF
+            NSUbiquitousContainerSupportedFolderLevels: Any
+    entitlements:
+      path: App/OptiPDF.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [iCloud.ch.ozan.optipdf]
+        com.apple.developer.icloud-services: [CloudDocuments]
+        com.apple.developer.ubiquity-container-identifiers: [iCloud.ch.ozan.optipdf]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ch.ozan.optipdf

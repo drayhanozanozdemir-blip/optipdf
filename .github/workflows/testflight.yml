@@ -97,7 +97,7 @@ jobs:
           CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
         run: |
           keychain initialize
-          app-store-connect fetch-signing-files ch.ozan.optipdf --type IOS_APP_STORE
+          app-store-connect fetch-signing-files ch.ozan.optipdf --type IOS_APP_STORE --create
           keychain add-certificates
           xcode-project use-profiles --archive-method app-store --custom-export-options '{"testFlightInternalTestingOnly": true}'
       - name: Build the signed IPA
