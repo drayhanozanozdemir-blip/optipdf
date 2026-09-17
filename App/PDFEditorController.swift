@@ -43,12 +43,14 @@ final class DiagnosticPDFView: PDFView {
 
 struct PDFEditorRepresentable: UIViewControllerRepresentable {
     let document: PDFDocument
+    let sidecar: AnnotationSidecar?
     let model: EditorModel
     let undoManager: UndoManager?
     let title: String
 
     func makeUIViewController(context: Context) -> PDFEditorController {
         let controller = PDFEditorController(document: document)
+        controller.sidecar = sidecar
         controller.model = model
         controller.undo = undoManager
         controller.exportName = title
@@ -76,6 +78,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     let document: PDFDocument
     weak var model: EditorModel?
     var undo: UndoManager?
+    /// Large documents: notes and drawings go to the side file with their own undo stack, so SwiftUI never
+    /// rewrites the whole PDF (see AnnotationSidecar).
+    var sidecar: AnnotationSidecar?
+    private let notesUndo = UndoManager()
+    private var editUndo: UndoManager? { sidecar == nil ? undo : notesUndo }
     var exportName = "OptiPDF"
 
     private let overlays = DrawingOverlays()
@@ -160,6 +167,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var canBecomeFirstResponder: Bool { true }
+
+    override var undoManager: UndoManager? { sidecar == nil ? super.undoManager : notesUndo }
 
     private var keyboardNavigationAvailable: Bool {
         guard let window = viewIfLoaded?.window, model?.showNotes != true else { return false }
@@ -280,6 +289,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         super.viewDidDisappear(animated)
         stopPencilGlide()
         restoreNavigationChrome()
+        sidecar?.flush(from: document)
+    }
+
+    @objc private func saveNotesBeforeSuspension() {
+        sidecar?.flush(from: document)
     }
 
     override func viewDidLoad() {
@@ -321,6 +335,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
                                                name: .PDFViewSelectionChanged, object: pdfView)
         NotificationCenter.default.addObserver(self, selector: #selector(pageChanged),
                                                name: .PDFViewPageChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(saveNotesBeforeSuspension),
+                                               name: UIApplication.didEnterBackgroundNotification, object: nil)
         applyDisplay(model?.displayMode ?? "continuous")
         apply(tool: model?.tool ?? tool, force: true)
         DispatchQueue.main.async { [weak self] in
@@ -668,7 +684,15 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     private func allPages() -> [PDFPage] { (0..<document.pageCount).compactMap { document.page(at: $0) } }
 
+    /// Moving or deleting pages would require rewriting the whole PDF, which large documents avoid.
+    private func blocksPageEditing() -> Bool {
+        guard sidecar != nil else { return false }
+        model?.show(toast: "Bu büyük belgede sayfa düzenleme kapalı; notlar ve çizimler çalışır.")
+        return true
+    }
+
     func movePages(from source: IndexSet, to destination: Int) {
+        guard !blocksPageEditing() else { return }
         let previous = allPages()
         var pages = previous
         pages.move(fromOffsets: source, toOffset: destination)
@@ -676,6 +700,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func deletePages(_ offsets: IndexSet) {
+        guard !blocksPageEditing() else { return }
         let previous = allPages()
         var pages = previous
         pages.remove(atOffsets: offsets)
@@ -687,6 +712,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func duplicatePage(_ index: Int) {
+        guard !blocksPageEditing() else { return }
         guard let page = document.page(at: index), let copy = page.copy() as? PDFPage else { return }
         overlays.load(copy)
         let previous = allPages()
@@ -696,6 +722,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func insertBlankPage(after index: Int) {
+        guard !blocksPageEditing() else { return }
         let size = document.page(at: index).map { DrawingStorage.displaySize(of: $0) } ?? CGSize(width: 595, height: 842)
         let image = UIGraphicsImageRenderer(size: size).image { context in
             UIColor.white.setFill()
@@ -709,6 +736,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func rotatePage(_ index: Int, by degrees: Int) {
+        guard !blocksPageEditing() else { return }
         guard let page = document.page(at: index) else { return }
         setRotation(of: page, to: (page.rotation + degrees + 360) % 360)
     }
@@ -755,6 +783,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
                 let bounds = line.bounds(for: page)
                 guard bounds.width > 0.5, bounds.height > 0.5 else { continue }
                 let annotation = PDFAnnotation(bounds: bounds, forType: subtype, withProperties: nil)
+                annotation.userName = AnnotationSidecar.marker
                 annotation.color = color
                 annotation.modificationDate = stamp
                 if added.isEmpty, let note, !note.isEmpty { annotation.contents = note }
@@ -779,6 +808,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     private func textAnnotation(_ text: String, bounds: CGRect, font: UIFont, color: UIColor) -> PDFAnnotation {
         let annotation = PDFAnnotation(bounds: bounds, forType: .freeText, withProperties: nil)
+        annotation.userName = AnnotationSidecar.marker
         annotation.contents = text
         annotation.font = font
         annotation.fontColor = color
@@ -793,16 +823,18 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     func add(_ items: [(PDFPage, PDFAnnotation)], actionName: String) {
         guard !items.isEmpty else { return }
         for (page, annotation) in items { page.addAnnotation(annotation) }
-        undo?.registerUndo(withTarget: self) { controller in controller.remove(items, actionName: actionName) }
-        undo?.setActionName(actionName)
+        editUndo?.registerUndo(withTarget: self) { controller in controller.remove(items, actionName: actionName) }
+        editUndo?.setActionName(actionName)
+        notesChanged(on: items.map(\.0))
         model?.reloadNotes()
     }
 
     func remove(_ items: [(PDFPage, PDFAnnotation)], actionName: String) {
         guard !items.isEmpty else { return }
         for (page, annotation) in items { page.removeAnnotation(annotation) }
-        undo?.registerUndo(withTarget: self) { controller in controller.add(items, actionName: actionName) }
-        undo?.setActionName(actionName)
+        editUndo?.registerUndo(withTarget: self) { controller in controller.add(items, actionName: actionName) }
+        editUndo?.setActionName(actionName)
+        notesChanged(on: items.map(\.0))
         model?.reloadNotes()
     }
 
@@ -810,8 +842,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         let old = annotation.contents ?? ""
         guard old != text else { return }
         annotation.contents = text
-        undo?.registerUndo(withTarget: self) { controller in controller.setNote(old, on: annotation) }
-        undo?.setActionName("Not")
+        // A note on an annotation that came with the PDF is kept in the side file from now on.
+        if sidecar != nil, !AnnotationSidecar.isOurs(annotation) { annotation.userName = AnnotationSidecar.marker }
+        editUndo?.registerUndo(withTarget: self) { controller in controller.setNote(old, on: annotation) }
+        editUndo?.setActionName("Not")
+        if let page = annotation.page { notesChanged(on: [page]) }
         model?.reloadNotes()
     }
 
@@ -821,15 +856,24 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         if previous.strokes.isEmpty && updated.strokes.isEmpty { return }
         guard previous.dataRepresentation() != updated.dataRepresentation() else { return }
         DrawingStorage.save(updated, on: page)
-        undo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(previous, replacing: updated, on: page) }
-        undo?.setActionName("Çizim")
+        editUndo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(previous, replacing: updated, on: page) }
+        editUndo?.setActionName("Çizim")
+        notesChanged(on: [page])
     }
 
     private func restoreDrawing(_ drawing: PKDrawing, replacing current: PKDrawing, on page: PDFPage) {
         overlays.replace(drawing, for: page)
         DrawingStorage.save(drawing, on: page)
-        undo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(current, replacing: drawing, on: page) }
-        undo?.setActionName("Çizim")
+        editUndo?.registerUndo(withTarget: self) { controller in controller.restoreDrawing(current, replacing: drawing, on: page) }
+        editUndo?.setActionName("Çizim")
+        notesChanged(on: [page])
+    }
+
+    private func notesChanged(on pages: [PDFPage]) {
+        guard let sidecar else { return }
+        let count = document.pageCount
+        sidecar.pagesChanged(pages.map { document.index(for: $0) }.filter { $0 >= 0 && $0 < count })
+        sidecar.scheduleSave(from: document)
     }
 
     /// Handwriting on the visible pages becomes typed text at the same place; rough shapes become clean ones.
@@ -889,41 +933,57 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     // MARK: Export
 
-    /// A copy with every drawing burned into its page, for Files, Mail, Acrobat and other apps.
+    /// A copy with every drawing burned into its page, for Files, Mail, Acrobat and other apps. Drawings become
+    /// images here; encoding runs in the background because a large PDF takes minutes and would trip the watchdog.
     func exportFlattened() {
-        guard let data = document.dataRepresentation(), let copy = PDFDocument(data: data) else {
-            model?.show(toast: "Dışa aktarılamadı.")
-            return
+        let large = sidecar != nil
+        model?.show(toast: large ? "Dışa aktarım hazırlanıyor; büyük belgede birkaç dakika sürebilir." : "Dışa aktarım hazırlanıyor…")
+        var stamps: [Int: UIImage] = [:]
+        for index in sidecar?.markedPageIndices ?? Array(0..<document.pageCount) {
+            guard let page = document.page(at: index), let drawing = overlays.drawing(for: page), !drawing.strokes.isEmpty else { continue }
+            let size = DrawingStorage.displaySize(of: page)
+            UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
+                stamps[index] = drawing.image(from: CGRect(origin: .zero, size: size), scale: 3)
+            }
+        }
+        // Large documents are copied from the original file plus OptiPDF's annotations, so the open document is not
+        // re-encoded while the user keeps reading.
+        let marks = sidecar?.collect(from: document).pages ?? []
+        let base: () -> Data? = large ? { [sourceData = sidecar?.sourceData] in sourceData } : { [document] in document.dataRepresentation() }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(exportName + " (OptiPDF).pdf")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let written = Self.writeFlattened(base: base, marks: marks, stamps: stamps, to: url)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard written else {
+                    self.model?.show(toast: "Dışa aktarılamadı.")
+                    return
+                }
+                let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                sheet.popoverPresentationController?.sourceView = self.view
+                sheet.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.maxX - 80, y: 0, width: 1, height: 1)
+                self.present(sheet, animated: true)
+            }
+        }
+    }
+
+    nonisolated private static func writeFlattened(base: () -> Data?, marks: [AnnotationSidecar.PageMarks], stamps: [Int: UIImage], to url: URL) -> Bool {
+        guard let data = base(), let copy = PDFDocument(data: data) else { return false }
+        for marks in marks {
+            guard let page = copy.page(at: marks.index) else { continue }
+            for annotation in marks.annotations where !DrawingStorage.isStorage(annotation) { page.addAnnotation(annotation) }
         }
         for index in 0..<copy.pageCount {
-            guard let page = copy.page(at: index), let original = document.page(at: index) else { continue }
+            guard let page = copy.page(at: index) else { continue }
             for annotation in page.annotations where DrawingStorage.isStorage(annotation) {
                 page.removeAnnotation(annotation)
             }
-            guard let drawing = overlays.drawing(for: original), !drawing.strokes.isEmpty else { continue }
-            let size = DrawingStorage.displaySize(of: page)
-            var image: UIImage?
-            UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
-                image = drawing.image(from: CGRect(origin: .zero, size: size), scale: 3)
-            }
+            guard let image = stamps[index] else { continue }
             let annotation = DrawingImageAnnotation(bounds: page.bounds(for: .cropBox), forType: .stamp, withProperties: nil)
             annotation.image = image
             page.addAnnotation(annotation)
         }
-        guard let flattened = copy.dataRepresentation(options: [PDFDocumentWriteOption.burnInAnnotationsOption: true]) else {
-            model?.show(toast: "Dışa aktarılamadı.")
-            return
-        }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(exportName + " (OptiPDF).pdf")
-        do {
-            try flattened.write(to: url, options: .atomic)
-        } catch {
-            model?.show(toast: "Dışa aktarılamadı.")
-            return
-        }
-        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-        sheet.popoverPresentationController?.sourceView = view
-        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.maxX - 80, y: 0, width: 1, height: 1)
-        present(sheet, animated: true)
+        guard let flattened = copy.dataRepresentation(options: [PDFDocumentWriteOption.burnInAnnotationsOption: true]) else { return false }
+        return (try? flattened.write(to: url, options: .atomic)) != nil
     }
 }

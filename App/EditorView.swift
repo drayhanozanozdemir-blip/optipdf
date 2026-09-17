@@ -27,7 +27,7 @@ struct EditorView: View {
     ]
 
     var body: some View {
-        PDFEditorRepresentable(document: file.pdf, model: model, undoManager: undoManager, title: title)
+        PDFEditorRepresentable(document: file.pdf, sidecar: file.sidecar, model: model, undoManager: undoManager, title: title)
             .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
             .overlay(alignment: .bottom) {
                 if model.selectionText != nil && !model.isSelecting {

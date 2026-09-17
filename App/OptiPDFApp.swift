@@ -38,6 +38,8 @@ final class PDFFile: ReferenceFileDocument {
     static var readableContentTypes: [UTType] { [.pdf] }
 
     let pdf: PDFDocument
+    /// Large PDFs keep OptiPDF's notes and drawings in a side file instead of being rewritten (AnnotationSidecar).
+    private(set) var sidecar: AnnotationSidecar?
 
 #if DEBUG
     init(preview: Bool) {
@@ -70,6 +72,11 @@ final class PDFFile: ReferenceFileDocument {
             throw CocoaError(.fileReadCorruptFile)
         }
         pdf = document
+        if document.pageCount > AnnotationSidecar.pageThreshold {
+            let store = AnnotationSidecar(key: AnnotationSidecar.key(for: data), sourceData: data)
+            store.apply(to: document)
+            sidecar = store
+        }
     }
 
     func snapshot(contentType: UTType) throws -> PDFDocument { pdf }
