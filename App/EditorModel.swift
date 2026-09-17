@@ -190,6 +190,7 @@ final class EditorModel: ObservableObject {
         didSet { UserDefaults.standard.set(keyboardScrollStep, forKey: "keyboardScrollStep") }
     }
     @Published var searchResults: [PDFSelection] = []
+    @Published var searching = false
     @Published var fullscreen = false {
         didSet { if oldValue != fullscreen { controller?.updateControls() } }
     }
@@ -305,10 +306,18 @@ final class EditorModel: ObservableObject {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let controller, !trimmed.isEmpty else {
             searchResults = []
+            searching = false
             controller?.clearSearch()
             return
         }
-        searchResults = controller.search(trimmed)
+        searchResults = []
+        searching = true
+        controller.search(trimmed) { [weak self] results in
+            guard let self else { return }
+            self.searchResults = results
+            self.searching = false
+            if results.isEmpty { self.show(toast: "“\(trimmed)” bulunamadı.") }
+        }
     }
 
     func reloadNotes() {

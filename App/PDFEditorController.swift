@@ -131,6 +131,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         gesture.delegate = self
         return gesture
     }()
+    private let findQueue = DispatchQueue(label: "ch.ozan.optipdf.find", qos: .userInitiated)
+    private var findGeneration = 0
     private var selectionStart: (page: PDFPage, point: CGPoint, word: PDFSelection?)?
     private var tool: EditorTool = .draw
     private weak var fullscreenNavigationController: UINavigationController?
@@ -618,14 +620,27 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     func currentPageText() -> String { pdfView.currentPage?.string ?? "" }
 
-    func search(_ query: String) -> [PDFSelection] {
-        let results = document.findString(query, withOptions: .caseInsensitive)
-        pdfView.highlightedSelections = results
-        if let first = results.first { pdfView.go(to: first) }
-        return results
+    /// Searches on a background queue: in a 1000-page PDF the search took seconds and froze the reader.
+    /// Only the latest search delivers its results.
+    func search(_ query: String, completion: @escaping ([PDFSelection]) -> Void) {
+        findGeneration += 1
+        let generation = findGeneration
+        let document = document
+        findQueue.async { [weak self] in
+            let results = document.findString(query, withOptions: .caseInsensitive)
+            DispatchQueue.main.async {
+                guard let self, generation == self.findGeneration else { return }
+                self.pdfView.highlightedSelections = results
+                if let first = results.first { self.pdfView.go(to: first) }
+                completion(results)
+            }
+        }
     }
 
-    func clearSearch() { pdfView.highlightedSelections = nil }
+    func clearSearch() {
+        findGeneration += 1
+        pdfView.highlightedSelections = nil
+    }
 
     func show(_ selection: PDFSelection) {
         pdfView.go(to: selection)

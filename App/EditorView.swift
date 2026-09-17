@@ -81,7 +81,7 @@ struct EditorView: View {
                 .padding(16)
             }
             .overlay(alignment: .topTrailing) {
-                if !model.searchResults.isEmpty && !model.fullscreen { searchPanel.padding(12) }
+                if (model.searching || !model.searchResults.isEmpty) && !model.fullscreen { searchPanel.padding(12) }
             }
             .toolbar(model.fullscreen ? .hidden : .visible, for: .navigationBar)
             .statusBarHidden(model.fullscreen)
@@ -349,7 +349,12 @@ struct EditorView: View {
     private var searchPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("\(model.searchResults.count) sonuç").font(.headline)
+                if model.searching {
+                    ProgressView()
+                    Text("Aranıyor…").font(.headline)
+                } else {
+                    Text("\(model.searchResults.count) sonuç").font(.headline)
+                }
                 Spacer()
                 Button {
                     searchText = ""
