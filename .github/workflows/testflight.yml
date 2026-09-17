@@ -107,6 +107,13 @@ jobs:
         run: |
           test -n "$OPTICEVIRI_KEY"
           xcode-project build-ipa --project OptiPDF.xcodeproj --scheme OptiPDF --archive-xcargs "CURRENT_PROJECT_VERSION=${{ github.run_number }} OPTICEVIRI_KEY=$OPTICEVIRI_KEY"
+      - name: Show archive errors
+        if: failure() && inputs.publish
+        run: |
+          for f in $(find build -name '*.log' 2>/dev/null); do
+            echo "== $f"
+            grep -nE 'error:|rror\b|entitlement|rovisioning|doesn.t' "$f" | tail -n 40
+          done
       - name: Upload to TestFlight
         if: inputs.publish
         env:
