@@ -489,6 +489,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         view.backgroundColor = tint.pageBackground
     }
 
+    /// Undo and redo of notes and drawings (the document's undo, or the notes undo of a large document).
+    func undoEdit() { editUndo?.undo() }
+
+    func redoEdit() { editUndo?.redo() }
+
     // MARK: Bookmarks
 
     func toggleBookmark() {

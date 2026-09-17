@@ -311,6 +311,15 @@ struct EditorView: View {
 
     private var drawBar: some View {
         HStack(spacing: 14) {
+            Button { model.controller?.undoEdit() } label: {
+                Image(systemName: "arrow.uturn.backward").frame(width: 32, height: 32)
+            }
+            .accessibilityLabel("Geri al")
+            Button { model.controller?.redoEdit() } label: {
+                Image(systemName: "arrow.uturn.forward").frame(width: 32, height: 32)
+            }
+            .accessibilityLabel("Yinele")
+            Divider().frame(height: 24)
             Toggle(isOn: $model.shapeSnap) {
                 Label("Şekil", systemImage: "circle.square")
             }

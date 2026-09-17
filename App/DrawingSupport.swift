@@ -44,7 +44,8 @@ enum DrawingStorage {
     }
 }
 
-/// A page's canvas. PencilKit's own undo stack is kept local: undo runs through the document, one step per stroke.
+/// A page's canvas. PencilKit gets no undo manager of its own: every stroke is one step in the document's undo
+/// (Geri al / Yinele in the draw bar, ⌘Z, three-finger swipe), so undo and the stored drawing never diverge.
 final class PageCanvasView: PKCanvasView {
     weak var page: PDFPage?
     var strokeCount = 0
@@ -56,13 +57,8 @@ final class PageCanvasView: PKCanvasView {
     var toolInUse = false
     var onResize: ((PageCanvasView) -> Void)?
     private var syncedWidth: CGFloat = 0
-    private let localUndo: UndoManager = {
-        let manager = UndoManager()
-        manager.levelsOfUndo = 3
-        return manager
-    }()
 
-    override var undoManager: UndoManager? { localUndo }
+    override var undoManager: UndoManager? { nil }
 
     override func layoutSubviews() {
         super.layoutSubviews()
