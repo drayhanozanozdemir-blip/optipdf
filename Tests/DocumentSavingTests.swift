@@ -110,13 +110,15 @@ final class DocumentSavingTests: XCTestCase {
         overlays.canvasViewDidEndUsingTool(canvas)
         XCTAssertGreaterThanOrEqual(edits, 1)
 
-        let afterStroke = edits
-        let toolSessionOver = expectation(description: "tool session over")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toolSessionOver.fulfill() }
-        wait(for: [toolSessionOver], timeout: 5)
+        // Outside a tool session (as in «Düzelt»), one flagged change is recorded and the flag clears right away.
+        canvas.userEditing = true
         canvas.drawing = PKDrawing(strokes: [stroke])
         overlays.canvasViewDrawingDidChange(canvas)
-        XCTAssertEqual(edits, afterStroke, "once the stroke is over, drawings set by code are not edits again")
+        let afterEdit = edits
+        XCTAssertFalse(canvas.userEditing)
+        canvas.drawing = PKDrawing(strokes: [stroke, stroke, stroke])
+        overlays.canvasViewDrawingDidChange(canvas)
+        XCTAssertEqual(edits, afterEdit, "after the recorded change, drawings set by code are not edits again")
         withExtendedLifetime(document) {}
     }
 }
