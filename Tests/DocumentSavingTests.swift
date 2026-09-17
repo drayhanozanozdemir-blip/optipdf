@@ -102,11 +102,21 @@ final class DocumentSavingTests: XCTestCase {
         overlays.canvasViewDrawingDidChange(canvas)
         XCTAssertEqual(edits, 0, "a drawing set by code (page reuse, resize sync, undo) is not an edit")
 
+        // PencilKit may report the change itself as well, and transformed drawings do not encode byte-identically,
+        // so a stroke yields at least one recorded edit.
         overlays.canvasViewDidBeginUsingTool(canvas)
         canvas.drawing = PKDrawing(strokes: [stroke, stroke])
         overlays.canvasViewDrawingDidChange(canvas)
         overlays.canvasViewDidEndUsingTool(canvas)
-        XCTAssertEqual(edits, 1)
+        XCTAssertGreaterThanOrEqual(edits, 1)
+
+        let afterStroke = edits
+        let toolSessionOver = expectation(description: "tool session over")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { toolSessionOver.fulfill() }
+        wait(for: [toolSessionOver], timeout: 5)
+        canvas.drawing = PKDrawing(strokes: [stroke])
+        overlays.canvasViewDrawingDidChange(canvas)
+        XCTAssertEqual(edits, afterStroke, "once the stroke is over, drawings set by code are not edits again")
         withExtendedLifetime(document) {}
     }
 }
