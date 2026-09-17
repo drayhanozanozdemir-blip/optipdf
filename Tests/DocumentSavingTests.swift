@@ -89,7 +89,7 @@ final class DocumentSavingTests: XCTestCase {
         let overlays = DrawingOverlays()
         var edits = 0
         overlays.onChange = { _, _, _ in edits += 1 }
-        let canvas = try XCTUnwrap(overlays.pdfView(PDFView(), overlayViewFor: page) as? PageCanvasView)
+        let canvas = try XCTUnwrap((overlays.pdfView(PDFView(), overlayViewFor: page) as? PageOverlayView)?.canvas)
         canvas.frame = CGRect(x: 0, y: 0, width: 595, height: 842)
         func point(_ x: CGFloat, _ y: CGFloat, _ time: TimeInterval) -> PKStrokePoint {
             PKStrokePoint(location: CGPoint(x: x, y: y), timeOffset: time, size: CGSize(width: 4, height: 4),
