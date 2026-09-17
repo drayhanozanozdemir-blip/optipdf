@@ -72,12 +72,13 @@ final class PDFFile: ReferenceFileDocument {
         pdf = document
     }
 
-    func snapshot(contentType: UTType) throws -> Data {
-        guard let data = pdf.dataRepresentation() else { throw CocoaError(.fileWriteUnknown) }
-        return data
-    }
+    /// SwiftUI takes the snapshot on the main thread and writes it on a background thread. Encoding a
+    /// 1000-page PDF takes seconds, so the main thread only hands over the document and autosave never
+    /// freezes reading or drawing.
+    func snapshot(contentType: UTType) throws -> PDFDocument { pdf }
 
-    func fileWrapper(snapshot: Data, configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: snapshot)
+    func fileWrapper(snapshot: PDFDocument, configuration: WriteConfiguration) throws -> FileWrapper {
+        guard let data = snapshot.dataRepresentation() else { throw CocoaError(.fileWriteUnknown) }
+        return FileWrapper(regularFileWithContents: data)
     }
 }

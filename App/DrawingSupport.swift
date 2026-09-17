@@ -117,17 +117,32 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
         load(page)
         let canvas = canvases[page] ?? makeCanvas()
-        canvases[page] = canvas
-        canvas.page = page
-        canvas.isUserInteractionEnabled = drawingEnabled
-        toolPicker?.addObserver(canvas)
+        attach(canvas, to: page)
         return canvas
     }
 
     func pdfView(_ pdfView: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
         guard let canvas = overlayView as? PageCanvasView else { return }
-        canvas.page = page
+        attach(canvas, to: page)
         sync(canvas)
+    }
+
+    /// A page that scrolls away gives up its canvas; its drawing stays in `stored`. Keeping one canvas per
+    /// visited page made long PDFs grow in memory until scrolling stalled.
+    func pdfView(_ pdfView: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
+        guard let canvas = overlayView as? PageCanvasView, canvases[page] === canvas else { return }
+        toolPicker?.removeObserver(canvas)
+        canvases[page] = nil
+    }
+
+    private func attach(_ canvas: PageCanvasView, to page: PDFPage) {
+        canvases[page] = canvas
+        canvas.page = page
+        canvas.isUserInteractionEnabled = drawingEnabled
+        if let toolPicker {
+            toolPicker.addObserver(canvas)
+            canvas.tool = toolPicker.selectedTool
+        }
     }
 
     /// Canvas points per page unit.

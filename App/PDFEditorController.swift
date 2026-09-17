@@ -137,6 +137,9 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     private var chromeBeforeFullscreen: (navigationHidden: Bool, toolbarHidden: Bool)?
     private var pickerVisible = false
     private var pencilScrollOrigin: CGPoint?
+    private var pencilGlide: CADisplayLink?
+    private var pencilGlideVelocity = CGPoint.zero
+    private var pencilGlideTime: CFTimeInterval = 0
     private weak var keyboardFocusScrollView: UIScrollView?
     private var readerPencilTouchTypes: [NSNumber] {
 #if DEBUG
@@ -207,6 +210,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         keyboardActionCount += 1
 #endif
         guard keyboardNavigationAvailable else { return }
+        stopPencilGlide()
         let backward = command.input == UIKeyCommand.inputUpArrow || command.input == UIKeyCommand.inputPageUp
             || (command.input == " " && command.modifierFlags.contains(.shift))
         if model?.displayMode == "page" {
@@ -223,6 +227,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     @objc private func restoreKeyboardFocusAfterScroll(_ gesture: UIPanGestureRecognizer) {
+        if gesture.state == .began { stopPencilGlide() }
         guard gesture.state == .ended || gesture.state == .cancelled,
               keyboardNavigationAvailable else { return }
 #if READER_PROBE
@@ -271,6 +276,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        stopPencilGlide()
         restoreNavigationChrome()
     }
 
@@ -326,6 +332,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         guard force || newTool != tool else { return }
         tool = newTool
         guard isViewLoaded else { return }
+        stopPencilGlide()
         let drawing = newTool == .draw
         pdfView.isInMarkupMode = drawing
         overlays.setDrawing(drawing)
@@ -399,6 +406,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard gestureRecognizer === hudTap else { return true }
+        // Any new touch on the page stops a pencil glide, as it stops a finger flick.
+        stopPencilGlide()
         return model?.fullscreen == true && model?.selectionText == nil && tool != .text
             && (touch.type != .pencil || tool == .navigate)
             && !(tool == .draw && UIDevice.current.userInterfaceIdiom == .phone)
@@ -451,30 +460,70 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         guard let scroll = scrollView else { return }
         switch gesture.state {
         case .began:
+            stopPencilGlide()
             pencilScrollOrigin = scroll.contentOffset
             clearSelection()
             fallthrough
         case .changed:
             guard let origin = pencilScrollOrigin else { return }
             let translation = gesture.translation(in: pdfView)
-            let minimum = CGPoint(x: -scroll.adjustedContentInset.left, y: -scroll.adjustedContentInset.top)
-            let maximum = CGPoint(x: max(minimum.x, scroll.contentSize.width - scroll.bounds.width + scroll.adjustedContentInset.right),
-                                  y: max(minimum.y, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom))
             if model?.displayMode != "page" {
-                scroll.setContentOffset(CGPoint(x: min(maximum.x, max(minimum.x, origin.x - translation.x)),
-                                                y: min(maximum.y, max(minimum.y, origin.y - translation.y))), animated: false)
+                scroll.setContentOffset(clampedOffset(CGPoint(x: origin.x - translation.x, y: origin.y - translation.y),
+                                                      in: scroll), animated: false)
             }
         case .ended:
             if model?.displayMode == "page" {
                 let translation = gesture.translation(in: pdfView)
                 if translation.x < -40 { pdfView.goToNextPage(nil) }
                 else if translation.x > 40 { pdfView.goToPreviousPage(nil) }
+            } else {
+                let velocity = gesture.velocity(in: pdfView)
+                startPencilGlide(CGPoint(x: -velocity.x, y: -velocity.y))
             }
             pencilScrollOrigin = nil
         case .cancelled, .failed:
             pencilScrollOrigin = nil
         default: break
         }
+    }
+
+    private func clampedOffset(_ offset: CGPoint, in scroll: UIScrollView) -> CGPoint {
+        let inset = scroll.adjustedContentInset
+        let minimum = CGPoint(x: -inset.left, y: -inset.top)
+        let maximum = CGPoint(x: max(minimum.x, scroll.contentSize.width - scroll.bounds.width + inset.right),
+                              y: max(minimum.y, scroll.contentSize.height - scroll.bounds.height + inset.bottom))
+        return CGPoint(x: min(maximum.x, max(minimum.x, offset.x)), y: min(maximum.y, max(minimum.y, offset.y)))
+    }
+
+    /// A pencil flick keeps gliding and slows down like a finger flick (UIScrollView's normal deceleration).
+    private func startPencilGlide(_ velocity: CGPoint) {
+        stopPencilGlide()
+        guard hypot(velocity.x, velocity.y) > 150 else { return }
+        pencilGlideVelocity = velocity
+        pencilGlideTime = CACurrentMediaTime()
+        let link = CADisplayLink(target: self, selector: #selector(glide(_:)))
+        link.add(to: .main, forMode: .common)
+        pencilGlide = link
+    }
+
+    private func stopPencilGlide() {
+        pencilGlide?.invalidate()
+        pencilGlide = nil
+    }
+
+    @objc private func glide(_ link: CADisplayLink) {
+        guard let scroll = scrollView, model?.displayMode != "page" else { return stopPencilGlide() }
+        let elapsed = CGFloat(min(0.05, max(0, link.timestamp - pencilGlideTime)))
+        pencilGlideTime = link.timestamp
+        let decay = pow(UIScrollView.DecelerationRate.normal.rawValue, elapsed * 1000)
+        pencilGlideVelocity = CGPoint(x: pencilGlideVelocity.x * decay, y: pencilGlideVelocity.y * decay)
+        let wanted = CGPoint(x: scroll.contentOffset.x + pencilGlideVelocity.x * elapsed,
+                             y: scroll.contentOffset.y + pencilGlideVelocity.y * elapsed)
+        let next = clampedOffset(wanted, in: scroll)
+        if next.x != wanted.x { pencilGlideVelocity.x = 0 }
+        if next.y != wanted.y { pencilGlideVelocity.y = 0 }
+        scroll.setContentOffset(next, animated: false)
+        if hypot(pencilGlideVelocity.x, pencilGlideVelocity.y) < 15 { stopPencilGlide() }
     }
 
     @objc private func pencilSelecting(_ gesture: UILongPressGestureRecognizer) {
@@ -492,6 +541,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         let point = pdfView.convert(location, to: page)
         switch gesture.state {
         case .began:
+            stopPencilGlide()
             model?.isSelecting = true
             let word = page.selectionForWord(at: point)
             selectionStart = (page, point, word)
