@@ -24,6 +24,13 @@ jobs:
           xcodebuild -version
       - name: Generate the Xcode project
         run: xcodegen generate
+      - name: Unit tests (iPad simulator)
+        run: |
+          set -eo pipefail
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for group in devices.values() for device in group if "iPad" in device["name"]))')
+          xcodebuild test -project OptiPDF.xcodeproj -scheme OptiPDF -only-testing:OptiPDFTests \
+            -destination "platform=iOS Simulator,id=$DEVICE" CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee unit-tests.log | grep -E 'error:|Test Case|Executed|TEST'
       - name: Prepare one-off iPad UI probe
         if: inputs.probe_source != ''
         env:
@@ -38,7 +45,7 @@ jobs:
           text = path.read_text()
           target = '  ReaderProbe:\n    type: bundle.ui-testing\n    platform: iOS\n    sources:\n      - ' + os.environ['RUNNER_TEMP'] + '/ReaderProbe\n    settings:\n      base:\n        GENERATE_INFOPLIST_FILE: true\n        TEST_TARGET_NAME: OptiPDF\n    dependencies:\n      - target: OptiPDF\n'
           text = text.replace('schemes:\n', target + 'schemes:\n')
-          text += '    test:\n      targets:\n        - ReaderProbe\n'
+          text = text.replace('        - OptiPDFTests\n', '        - OptiPDFTests\n        - ReaderProbe\n')
           path.write_text(text)
           PY
           xcodegen generate
@@ -50,7 +57,7 @@ jobs:
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for group in devices.values() for device in group if "iPad" in device["name"]))')
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
-          xcodebuild test -project OptiPDF.xcodeproj -scheme OptiPDF \
+          xcodebuild test -project OptiPDF.xcodeproj -scheme OptiPDF -only-testing:ReaderProbe \
             -destination "platform=iOS Simulator,id=$DEVICE" CODE_SIGNING_ALLOWED=NO SWIFT_ACTIVE_COMPILATION_CONDITIONS="DEBUG READER_PROBE" \
             -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/ReaderProbe.xcresult" \
             2>&1 | tee "$RUNNER_TEMP/reader-probe.log" | grep -E 'error:|warning:|Test Case|Executed|TEST|KEYTRACE'

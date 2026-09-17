@@ -868,6 +868,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
                         return perfect
                     }
                 }
+                canvas.userEditing = true
                 canvas.drawing = PKDrawing(strokes: strokes)
                 self.add(added, actionName: "Düzelt")
             }

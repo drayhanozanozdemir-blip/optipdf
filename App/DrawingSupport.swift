@@ -49,6 +49,11 @@ final class PageCanvasView: PKCanvasView {
     weak var page: PDFPage?
     var strokeCount = 0
     var expectedData: Data?
+    /// Set when the pencil starts drawing, erasing or moving strokes, cleared once that change is recorded.
+    /// Drawings set by code (page reuse, sync after resizing, undo) never count as edits, so reading a page with
+    /// a drawing no longer marks the document changed and triggers a save of the whole PDF.
+    var userEditing = false
+    var toolInUse = false
     var onResize: ((PageCanvasView) -> Void)?
     private var syncedWidth: CGFloat = 0
     private let localUndo: UndoManager = {
@@ -170,8 +175,25 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
         canvas.strokeCount = drawing.strokes.count
     }
 
+    func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+        guard let canvas = canvasView as? PageCanvasView else { return }
+        canvas.toolInUse = true
+        canvas.userEditing = true
+    }
+
+    func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
+        guard let canvas = canvasView as? PageCanvasView else { return }
+        canvas.toolInUse = false
+        // The stroke's drawing change can arrive just after the tool ends; stop counting changes shortly after.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak canvas] in
+            if let canvas, !canvas.toolInUse { canvas.userEditing = false }
+        }
+    }
+
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-        guard !programmatic, let canvas = canvasView as? PageCanvasView, let page = canvas.page, canvas.bounds.width > 1 else { return }
+        guard !programmatic, let canvas = canvasView as? PageCanvasView, canvas.userEditing,
+              let page = canvas.page, canvas.bounds.width > 1 else { return }
+        defer { if !canvas.toolInUse { canvas.userEditing = false } }
         if let expected = canvas.expectedData {
             if expected == canvas.drawing.dataRepresentation() { return }
             canvas.expectedData = nil

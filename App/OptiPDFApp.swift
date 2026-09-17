@@ -72,13 +72,49 @@ final class PDFFile: ReferenceFileDocument {
         pdf = document
     }
 
-    /// SwiftUI takes the snapshot on the main thread and writes it on a background thread. Encoding a
-    /// 1000-page PDF takes seconds, so the main thread only hands over the document and autosave never
-    /// freezes reading or drawing.
     func snapshot(contentType: UTType) throws -> PDFDocument { pdf }
 
+    /// Saving asks for the snapshot and the file wrapper on the main thread (UIDocument contents(forType:)),
+    /// so the wrapper must not encode yet; see PDFFileWrapper.
     func fileWrapper(snapshot: PDFDocument, configuration: WriteConfiguration) throws -> FileWrapper {
-        guard let data = snapshot.dataRepresentation() else { throw CocoaError(.fileWriteUnknown) }
-        return FileWrapper(regularFileWithContents: data)
+        PDFFileWrapper(document: snapshot)
+    }
+}
+
+/// Encodes the PDF only when UIDocument writes the file on its file-access queue. Encoding the 1514-page
+/// Bolognia PDF inside contents(forType:) blocked the main thread past the 10-second scene watchdog while the
+/// app went to the background, and iOS killed OptiPDF (0x8BADF00D, build 20, 17.09.2026).
+final class PDFFileWrapper: FileWrapper {
+    private let document: PDFDocument
+    private let lock = NSLock()
+    private var encoded: Data?
+#if DEBUG
+    static var lastEncodeOnMainThread: Bool?
+#endif
+
+    init(document: PDFDocument) {
+        self.document = document
+        super.init(regularFileWithContents: Data())
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override var regularFileContents: Data? { encode() }
+
+    override func write(to url: URL, options: FileWrapper.WritingOptions, originalContentsURL: URL?) throws {
+        guard let data = encode() else { throw CocoaError(.fileWriteUnknown) }
+        try data.write(to: url, options: .atomic)
+    }
+
+    private func encode() -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        if encoded == nil {
+#if DEBUG
+            Self.lastEncodeOnMainThread = Thread.isMainThread
+#endif
+            encoded = document.dataRepresentation()
+        }
+        return encoded
     }
 }
