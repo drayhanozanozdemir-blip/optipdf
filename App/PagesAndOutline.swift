@@ -143,3 +143,41 @@ struct OutlineSheet: View {
         }
     }
 }
+
+struct BookmarksSheet: View {
+    @ObservedObject var model: EditorModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if model.bookmarks.isEmpty {
+                    Text("Henüz yer imi yok. Menüden «Yer imi ekle» ile sayfayı işaretle.").foregroundStyle(.secondary)
+                }
+                ForEach(model.bookmarks) { bookmark in
+                    Button {
+                        model.controller?.goToPage(bookmark.page)
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(bookmark.title).lineLimit(2)
+                            Text("Sayfa \(bookmark.page + 1) · \(bookmark.added.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .onDelete { offsets in
+                    let pages = offsets.map { model.bookmarks[$0].page }
+                    for page in pages { model.controller?.removeBookmark(page: page) }
+                }
+            }
+            .navigationTitle("Yer imleri")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Kapat") { dismiss() } }
+            }
+        }
+    }
+}

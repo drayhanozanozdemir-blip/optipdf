@@ -24,6 +24,26 @@ enum EditorTool: String, CaseIterable, Identifiable {
     }
 }
 
+/// Page tint for reading: sepia multiplies a warm colour into the page, night inverts page and ink.
+enum ReadingTint: String, CaseIterable, Identifiable {
+    case normal, sepia, night
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .normal: return "Normal"
+        case .sepia: return "Sepya"
+        case .night: return "Gece (renkler ters)"
+        }
+    }
+    var pageBackground: UIColor {
+        switch self {
+        case .normal: return .secondarySystemBackground
+        case .sepia: return UIColor(red: 0.86, green: 0.81, blue: 0.70, alpha: 1)
+        case .night: return .black
+        }
+    }
+}
+
 enum AIAction {
     case translate, translatePage, explain, summarizePage, ask(String), summarizeNotes
 }
@@ -191,6 +211,14 @@ final class EditorModel: ObservableObject {
     }
     @Published var searchResults: [PDFSelection] = []
     @Published var searching = false
+    @Published var bookmarks: [Bookmark] = []
+    var currentPageBookmarked: Bool { bookmarks.contains { $0.page == currentPage } }
+    @Published var readingTint = ReadingTint(rawValue: UserDefaults.standard.string(forKey: "readingTint") ?? "") ?? .normal {
+        didSet {
+            UserDefaults.standard.set(readingTint.rawValue, forKey: "readingTint")
+            if oldValue != readingTint { controller?.applyTint(readingTint) }
+        }
+    }
     @Published var fullscreen = false {
         didSet { if oldValue != fullscreen { controller?.updateControls() } }
     }
@@ -312,9 +340,10 @@ final class EditorModel: ObservableObject {
         }
         searchResults = []
         searching = true
-        controller.search(trimmed) { [weak self] results in
+        controller.search(trimmed) { [weak self] results, finished in
             guard let self else { return }
             self.searchResults = results
+            guard finished else { return }
             self.searching = false
             if results.isEmpty { self.show(toast: "“\(trimmed)” bulunamadı.") }
         }

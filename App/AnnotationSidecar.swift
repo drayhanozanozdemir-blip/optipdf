@@ -35,11 +35,7 @@ final class AnnotationSidecar {
     private var dirty = false
 
     init(key: String, directory: URL? = nil, sourceData: Data? = nil) {
-        let base = directory ?? (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                               appropriateFor: nil, create: true))
-            .map { $0.appendingPathComponent("Annotations", isDirectory: true) }
-            ?? FileManager.default.temporaryDirectory
-        fileURL = base.appendingPathComponent(key + ".pdf")
+        fileURL = (directory ?? DocumentLibrary.shared.directory).appendingPathComponent(key + ".pdf")
         self.sourceData = sourceData
     }
 

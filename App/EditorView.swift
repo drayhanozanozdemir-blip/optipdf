@@ -17,6 +17,7 @@ struct EditorView: View {
     @State private var addingNote = false
     @State private var showPages = false
     @State private var showOutline = false
+    @State private var showBookmarks = false
 
     /// iPhone and narrow iPad windows: one menu instead of a toolbar row, icon-only selection bar.
     private var compact: Bool { sizeClass == .compact }
@@ -27,7 +28,8 @@ struct EditorView: View {
     ]
 
     var body: some View {
-        PDFEditorRepresentable(document: file.pdf, sidecar: file.sidecar, model: model, undoManager: undoManager, title: title)
+        PDFEditorRepresentable(document: file.pdf, sidecar: file.sidecar, reading: file.reading, model: model,
+                               undoManager: undoManager, title: title)
             .ignoresSafeArea(edges: model.fullscreen ? .all : .bottom)
             .overlay(alignment: .bottom) {
                 if model.selectionText != nil && !model.isSelecting {
@@ -109,6 +111,9 @@ struct EditorView: View {
                     Color.clear.sheet(isPresented: $showOutline) {
                         OutlineSheet(model: model)
                     }
+                    Color.clear.sheet(isPresented: $showBookmarks) {
+                        BookmarksSheet(model: model)
+                    }
                 }
             }
             .alert("Soru sor", isPresented: $asking) {
@@ -179,13 +184,27 @@ struct EditorView: View {
         Button { model.showNotes.toggle() } label: {
             Label("Notlar", systemImage: "note.text")
         }
+        Button { model.controller?.toggleBookmark() } label: {
+            Label(model.currentPageBookmarked ? "Yer imini kaldır" : "Yer imi ekle",
+                  systemImage: model.currentPageBookmarked ? "bookmark.fill" : "bookmark")
+        }
+        Button { showBookmarks = true } label: {
+            Label("Yer imleri", systemImage: "bookmark.circle")
+        }
         Button { showOutline = true } label: {
             Label("İçindekiler", systemImage: "list.bullet.indent")
         }
         Button { showPages = true } label: {
             Label("Sayfalar", systemImage: "square.grid.2x2")
         }
-        Button { model.controller?.exportFlattened() } label: {
+        Menu {
+            Button { model.controller?.export(.annotated) } label: {
+                Label("Notlu kopya (Acrobat'ta düzenlenebilir)", systemImage: "doc.badge.ellipsis")
+            }
+            Button { model.controller?.export(.flattened) } label: {
+                Label("Düz kopya (çizimler görüntü olarak)", systemImage: "doc.richtext")
+            }
+        } label: {
             Label("Dışa aktar", systemImage: "square.and.arrow.up")
         }
     }
@@ -202,6 +221,11 @@ struct EditorView: View {
             Text("Sayfa sayfa çevir").tag("page")
             Text("İki sayfa").tag("twoUp")
         }
+        Picker("Okuma tonu", selection: $model.readingTint) {
+            ForEach(ReadingTint.allCases) { tint in
+                Text(tint.title).tag(tint)
+            }
+        }
         Picker("Hedef dil", selection: $target) {
             ForEach(Self.languages, id: \.code) { language in
                 Text(language.name).tag(language.code)
@@ -211,6 +235,9 @@ struct EditorView: View {
             Text("Fable (en iyi kalite)").tag("fable")
             Text("Astra (hızlı)").tag("astra")
             Text("Cihazda (hassas belgeler)").tag("device")
+        }
+        Button { model.controller?.shareDiagnostics() } label: {
+            Label("Tanılama kayıtlarını paylaş", systemImage: "waveform.path.ecg")
         }
     }
 
@@ -241,7 +268,10 @@ struct EditorView: View {
     private var pageIndicator: some View {
         if model.pageCount > 0 && model.selectionText == nil && (!model.fullscreen || model.hudVisible) {
             Button { showPages = true } label: {
-                Text("\(model.currentPage + 1) / \(model.pageCount)")
+                HStack(spacing: 6) {
+                    if model.currentPageBookmarked { Image(systemName: "bookmark.fill").font(.caption) }
+                    Text("\(model.currentPage + 1) / \(model.pageCount)")
+                }
                     .font(.callout.monospacedDigit())
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -351,7 +381,7 @@ struct EditorView: View {
             HStack {
                 if model.searching {
                     ProgressView()
-                    Text("Aranıyor…").font(.headline)
+                    Text(model.searchResults.isEmpty ? "Aranıyor…" : "\(model.searchResults.count) sonuç…").font(.headline)
                 } else {
                     Text("\(model.searchResults.count) sonuç").font(.headline)
                 }

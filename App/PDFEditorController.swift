@@ -44,6 +44,7 @@ final class DiagnosticPDFView: PDFView {
 struct PDFEditorRepresentable: UIViewControllerRepresentable {
     let document: PDFDocument
     let sidecar: AnnotationSidecar?
+    let reading: ReadingState?
     let model: EditorModel
     let undoManager: UndoManager?
     let title: String
@@ -51,6 +52,7 @@ struct PDFEditorRepresentable: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> PDFEditorController {
         let controller = PDFEditorController(document: document)
         controller.sidecar = sidecar
+        controller.reading = reading
         controller.model = model
         controller.undo = undoManager
         controller.exportName = title
@@ -81,6 +83,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     /// Large documents: notes and drawings go to the side file with their own undo stack, so SwiftUI never
     /// rewrites the whole PDF (see AnnotationSidecar).
     var sidecar: AnnotationSidecar?
+    var reading: ReadingState?
     private let notesUndo = UndoManager()
     private var editUndo: UndoManager? { sidecar == nil ? undo : notesUndo }
     var exportName = "OptiPDF"
@@ -138,8 +141,13 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         gesture.delegate = self
         return gesture
     }()
-    private let findQueue = DispatchQueue(label: "ch.ozan.optipdf.find", qos: .userInitiated)
-    private var findGeneration = 0
+    private let findRelay = FindRelay()
+    private var findMatches: [PDFSelection] = []
+    private var findUpdate: (([PDFSelection], Bool) -> Void)?
+    private var findJumped = false
+    private var findDeliveryScheduled = false
+    private static let findLimit = 400
+    private var restoredPosition = false
     private var selectionStart: (page: PDFPage, point: CGPoint, word: PDFSelection?)?
     private var tool: EditorTool = .draw
     private weak var fullscreenNavigationController: UINavigationController?
@@ -283,6 +291,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         super.viewDidAppear(animated)
         becomeFirstResponder()
         updateControls()
+        guard !restoredPosition else { return }
+        restoredPosition = true
+        // Back to the page the user left; the layout exists by now.
+        if let last = reading?.lastPage, last > 0, last < document.pageCount, let page = document.page(at: last) {
+            DispatchQueue.main.async { [weak self] in self?.pdfView.go(to: page) }
+        }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -290,10 +304,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         stopPencilGlide()
         restoreNavigationChrome()
         sidecar?.flush(from: document)
+        reading?.saveNow()
     }
 
     @objc private func saveNotesBeforeSuspension() {
         sidecar?.flush(from: document)
+        reading?.saveNow()
     }
 
     override func viewDidLoad() {
@@ -319,6 +335,11 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         overlays.onChange = { [weak self] page, previous, updated in self?.drawingChanged(page, from: previous, to: updated) }
         pdfView.pageOverlayViewProvider = overlays
         pdfView.document = document
+        findRelay.onMatch = { [weak self] match in self?.collect(match: match) }
+        findRelay.onEnd = { [weak self] in self?.deliverMatches(final: true) }
+        document.delegate = findRelay
+        applyTint(model?.readingTint ?? .normal)
+        model?.bookmarks = reading?.bookmarks ?? []
 
         pdfView.addGestureRecognizer(pencilSelect)
         pdfView.addGestureRecognizer(pencilScroll)
@@ -460,6 +481,31 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     func setShapeSnap(_ enabled: Bool) {
         overlays.snapShapes = enabled
+    }
+
+    func applyTint(_ tint: ReadingTint) {
+        overlays.tint = tint
+        pdfView.backgroundColor = tint.pageBackground
+        view.backgroundColor = tint.pageBackground
+    }
+
+    // MARK: Bookmarks
+
+    func toggleBookmark() {
+        guard let reading, let page = pdfView.currentPage else { return }
+        let index = document.index(for: page)
+        let firstLine = (page.string ?? "").split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty } ?? ""
+        let title = firstLine.isEmpty ? "Sayfa \(index + 1)" : String(firstLine.prefix(60))
+        let added = reading.toggleBookmark(page: index, title: title)
+        model?.bookmarks = reading.bookmarks
+        model?.show(toast: added ? "Yer imi eklendi." : "Yer imi kaldırıldı.")
+    }
+
+    func removeBookmark(page: Int) {
+        reading?.removeBookmark(page: page)
+        model?.bookmarks = reading?.bookmarks ?? []
     }
 
     private var scrollView: UIScrollView? {
@@ -613,6 +659,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         guard let page = pdfView.currentPage else { return }
         let index = document.index(for: page)
         if model?.currentPage != index { model?.currentPage = index }
+        reading?.setLastPage(index)
     }
 
     func clearSelection() {
@@ -636,26 +683,52 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     func currentPageText() -> String { pdfView.currentPage?.string ?? "" }
 
-    /// Searches on a background queue: in a 1000-page PDF the search took seconds and froze the reader.
-    /// Only the latest search delivers its results.
-    func search(_ query: String, completion: @escaping ([PDFSelection]) -> Void) {
-        findGeneration += 1
-        let generation = findGeneration
-        let document = document
-        findQueue.async { [weak self] in
-            let results = document.findString(query, withOptions: .caseInsensitive)
-            DispatchQueue.main.async {
-                guard let self, generation == self.findGeneration else { return }
-                self.pdfView.highlightedSelections = results
-                if let first = results.first { self.pdfView.go(to: first) }
-                completion(results)
+    /// PDFKit's incremental find: matches arrive while the pages are still being scanned, so the first results
+    /// of a 1514-page book show at once. The update closure gets the matches so far and whether the search ended.
+    func search(_ query: String, update: @escaping ([PDFSelection], Bool) -> Void) {
+        cancelFind()
+        findUpdate = update
+        document.beginFindString(query, withOptions: .caseInsensitive)
+    }
+
+    func clearSearch() {
+        cancelFind()
+        pdfView.highlightedSelections = nil
+    }
+
+    private func cancelFind() {
+        if document.isFinding { document.cancelFindString() }
+        findMatches = []
+        findJumped = false
+        findUpdate = nil
+    }
+
+    private func collect(match: PDFSelection) {
+        guard findUpdate != nil else { return }
+        findMatches.append(match)
+        if findMatches.count >= Self.findLimit {
+            document.cancelFindString()
+            deliverMatches(final: true)
+        } else if !findDeliveryScheduled {
+            findDeliveryScheduled = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                self?.findDeliveryScheduled = false
+                self?.deliverMatches(final: false)
             }
         }
     }
 
-    func clearSearch() {
-        findGeneration += 1
-        pdfView.highlightedSelections = nil
+    private func deliverMatches(final: Bool) {
+        guard let update = findUpdate else { return }
+        // The end notice of a cancelled search can arrive after the next one began; that one is not finished.
+        let finished = final && !document.isFinding
+        pdfView.highlightedSelections = findMatches
+        if !findJumped, let first = findMatches.first {
+            findJumped = true
+            pdfView.go(to: first)
+        }
+        update(findMatches, finished)
+        if finished { findUpdate = nil }
     }
 
     func show(_ selection: PDFSelection) {
@@ -931,43 +1004,56 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         return textAnnotation(text, bounds: bounds, font: font, color: color)
     }
 
-    // MARK: Export
+    // MARK: Export and sharing
 
-    /// A copy with every drawing burned into its page, for Files, Mail, Acrobat and other apps. Drawings become
-    /// images here; encoding runs in the background because a large PDF takes minutes and would trip the watchdog.
-    func exportFlattened() {
+    enum ExportMode {
+        /// Notes stay real annotations and drawings become ink annotations, editable in Acrobat or Preview.
+        case annotated
+        /// Everything burned into the pages.
+        case flattened
+    }
+
+    /// A copy for Files, Mail, Acrobat and other apps. Encoding runs in the background because a large PDF
+    /// takes minutes and would trip the watchdog; large documents are copied from the original file plus
+    /// OptiPDF's annotations, so the open document is not re-encoded while the user keeps reading.
+    func export(_ mode: ExportMode) {
         let large = sidecar != nil
         model?.show(toast: large ? "Dışa aktarım hazırlanıyor; büyük belgede birkaç dakika sürebilir." : "Dışa aktarım hazırlanıyor…")
-        var stamps: [Int: UIImage] = [:]
+        var drawings: [Int: PKDrawing] = [:]
         for index in sidecar?.markedPageIndices ?? Array(0..<document.pageCount) {
             guard let page = document.page(at: index), let drawing = overlays.drawing(for: page), !drawing.strokes.isEmpty else { continue }
-            let size = DrawingStorage.displaySize(of: page)
-            UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
-                stamps[index] = drawing.image(from: CGRect(origin: .zero, size: size), scale: 3)
+            drawings[index] = drawing
+        }
+        var stamps: [Int: UIImage] = [:]
+        if mode == .flattened {
+            for (index, drawing) in drawings {
+                guard let page = document.page(at: index) else { continue }
+                let size = DrawingStorage.displaySize(of: page)
+                UITraitCollection(userInterfaceStyle: .light).performAsCurrent {
+                    stamps[index] = drawing.image(from: CGRect(origin: .zero, size: size), scale: 3)
+                }
             }
         }
-        // Large documents are copied from the original file plus OptiPDF's annotations, so the open document is not
-        // re-encoded while the user keeps reading.
         let marks = sidecar?.collect(from: document).pages ?? []
         let base: () -> Data? = large ? { [sourceData = sidecar?.sourceData] in sourceData } : { [document] in document.dataRepresentation() }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(exportName + " (OptiPDF).pdf")
+        let suffix = mode == .flattened ? " (OptiPDF düz).pdf" : " (OptiPDF notlu).pdf"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(exportName + suffix)
+        let inks = mode == .annotated ? drawings : [:]
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let written = Self.writeFlattened(base: base, marks: marks, stamps: stamps, to: url)
+            let written = Self.writeCopy(base: base, marks: marks, drawings: inks, stamps: stamps, burnIn: mode == .flattened, to: url)
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard written else {
                     self.model?.show(toast: "Dışa aktarılamadı.")
                     return
                 }
-                let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                sheet.popoverPresentationController?.sourceView = self.view
-                sheet.popoverPresentationController?.sourceRect = CGRect(x: self.view.bounds.maxX - 80, y: 0, width: 1, height: 1)
-                self.present(sheet, animated: true)
+                self.present(activity: [url])
             }
         }
     }
 
-    nonisolated private static func writeFlattened(base: () -> Data?, marks: [AnnotationSidecar.PageMarks], stamps: [Int: UIImage], to url: URL) -> Bool {
+    nonisolated private static func writeCopy(base: () -> Data?, marks: [AnnotationSidecar.PageMarks], drawings: [Int: PKDrawing],
+                                             stamps: [Int: UIImage], burnIn: Bool, to url: URL) -> Bool {
         guard let data = base(), let copy = PDFDocument(data: data) else { return false }
         for marks in marks {
             guard let page = copy.page(at: marks.index) else { continue }
@@ -978,12 +1064,81 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             for annotation in page.annotations where DrawingStorage.isStorage(annotation) {
                 page.removeAnnotation(annotation)
             }
-            guard let image = stamps[index] else { continue }
-            let annotation = DrawingImageAnnotation(bounds: page.bounds(for: .cropBox), forType: .stamp, withProperties: nil)
-            annotation.image = image
-            page.addAnnotation(annotation)
+            if let drawing = drawings[index] {
+                for annotation in inkAnnotations(for: drawing, on: page) { page.addAnnotation(annotation) }
+            }
+            if let image = stamps[index] {
+                let annotation = DrawingImageAnnotation(bounds: page.bounds(for: .cropBox), forType: .stamp, withProperties: nil)
+                annotation.image = image
+                page.addAnnotation(annotation)
+            }
         }
-        guard let flattened = copy.dataRepresentation(options: [PDFDocumentWriteOption.burnInAnnotationsOption: true]) else { return false }
-        return (try? flattened.write(to: url, options: .atomic)) != nil
+        let options: [PDFDocumentWriteOption: Any] = burnIn ? [.burnInAnnotationsOption: true] : [:]
+        guard let output = copy.dataRepresentation(options: options) else { return false }
+        return (try? output.write(to: url, options: .atomic)) != nil
+    }
+
+    /// PencilKit strokes as PDF ink annotations, for copies other apps can edit. Drawings are stored in display
+    /// units (top-left origin, page as shown); annotation paths are relative to the crop box, y up.
+    nonisolated static func inkAnnotations(for drawing: PKDrawing, on page: PDFPage) -> [PDFAnnotation] {
+        let crop = page.bounds(for: .cropBox)
+        let rotation = ((page.rotation % 360) + 360) % 360
+        func pagePoint(_ point: CGPoint) -> CGPoint {
+            switch rotation {
+            case 90: return CGPoint(x: point.y, y: point.x)
+            case 180: return CGPoint(x: crop.width - point.x, y: point.y)
+            case 270: return CGPoint(x: crop.width - point.y, y: crop.height - point.x)
+            default: return CGPoint(x: point.x, y: crop.height - point.y)
+            }
+        }
+        return drawing.strokes.compactMap { stroke in
+            let points = stroke.path.interpolatedPoints(by: .distance(2)).map { pagePoint($0.location) }
+            guard let first = points.first else { return nil }
+            let path = UIBezierPath()
+            path.move(to: first)
+            for point in points.dropFirst() { path.addLine(to: point) }
+            let annotation = PDFAnnotation(bounds: crop, forType: .ink, withProperties: nil)
+            annotation.color = stroke.ink.color
+            let border = PDFBorder()
+            border.lineWidth = max(1, stroke.path.first?.size.width ?? 2)
+            annotation.border = border
+            annotation.add(path)
+            return annotation
+        }
+    }
+
+    /// The newest MetricKit crash and hang reports (see DiagnosticsCollector).
+    func shareDiagnostics() {
+        let reports = Array(DiagnosticsCollector.reports().prefix(5))
+        guard !reports.isEmpty else {
+            model?.show(toast: "Henüz tanılama kaydı yok; bir çökme veya donmadan sonraki açılışta oluşur.")
+            return
+        }
+        present(activity: reports)
+    }
+
+    private func present(activity items: [Any]) {
+        let sheet = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.maxX - 80, y: 0, width: 1, height: 1)
+        present(sheet, animated: true)
+    }
+}
+
+/// Relays PDFKit's find callbacks, which may come on any thread, to the main thread.
+final class FindRelay: NSObject, PDFDocumentDelegate {
+    var onMatch: ((PDFSelection) -> Void)?
+    var onEnd: (() -> Void)?
+
+    func didMatchString(_ instance: PDFSelection) {
+        forward { self.onMatch?(instance) }
+    }
+
+    func documentDidEndDocumentFind(_ notification: Notification) {
+        forward { self.onEnd?() }
+    }
+
+    private func forward(_ work: @escaping () -> Void) {
+        if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
     }
 }

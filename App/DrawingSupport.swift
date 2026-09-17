@@ -72,6 +72,49 @@ final class PageCanvasView: PKCanvasView {
     }
 }
 
+/// What PDFKit shows above a page: the drawing canvas and, above it, the reading tint (sepia or inverted night
+/// colours), which blends with the page and the ink alike.
+final class PageOverlayView: UIView {
+    let canvas = PageCanvasView()
+    let tint = UIView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isOpaque = false
+        for sub in [canvas, tint] as [UIView] {
+            sub.frame = bounds
+            sub.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            addSubview(sub)
+        }
+        tint.isUserInteractionEnabled = false
+        tint.isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    func apply(_ mode: ReadingTint) {
+        switch mode {
+        case .normal:
+            tint.isHidden = true
+        case .sepia:
+            tint.isHidden = false
+            tint.backgroundColor = UIColor(red: 0.96, green: 0.90, blue: 0.76, alpha: 1)
+            tint.layer.compositingFilter = "multiplyBlendMode"
+        case .night:
+            tint.isHidden = false
+            tint.backgroundColor = .white
+            tint.layer.compositingFilter = "differenceBlendMode"
+        }
+    }
+
+    /// Touches meant for the page (scrolling, selecting) pass through unless the canvas is drawing.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
+    }
+}
+
 /// Draws a rendered drawing; used only for the flattened export.
 final class DrawingImageAnnotation: PDFAnnotation {
     var image: UIImage?
@@ -92,6 +135,11 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
     private var loadedPages: Set<PDFPage> = []
     weak var toolPicker: PKToolPicker?
     var snapShapes = false
+    var tint: ReadingTint = .normal {
+        didSet {
+            for canvas in canvases.values { (canvas.superview as? PageOverlayView)?.apply(tint) }
+        }
+    }
     /// Page, previous drawing, new drawing (page units) after a user edit.
     var onChange: ((PDFPage, PKDrawing, PKDrawing) -> Void)?
     private var drawingEnabled = false
@@ -121,22 +169,22 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
 
     func pdfView(_ view: PDFView, overlayViewFor page: PDFPage) -> UIView? {
         load(page)
-        let canvas = canvases[page] ?? makeCanvas()
-        attach(canvas, to: page)
-        return canvas
+        let overlay = (canvases[page]?.superview as? PageOverlayView) ?? makeOverlay()
+        attach(overlay.canvas, to: page)
+        return overlay
     }
 
     func pdfView(_ pdfView: PDFView, willDisplayOverlayView overlayView: UIView, for page: PDFPage) {
-        guard let canvas = overlayView as? PageCanvasView else { return }
-        attach(canvas, to: page)
-        sync(canvas)
+        guard let overlay = overlayView as? PageOverlayView else { return }
+        attach(overlay.canvas, to: page)
+        sync(overlay.canvas)
     }
 
     /// A page that scrolls away gives up its canvas; its drawing stays in `stored`. Keeping one canvas per
     /// visited page made long PDFs grow in memory until scrolling stalled.
     func pdfView(_ pdfView: PDFView, willEndDisplayingOverlayView overlayView: UIView, for page: PDFPage) {
-        guard let canvas = overlayView as? PageCanvasView, canvases[page] === canvas else { return }
-        toolPicker?.removeObserver(canvas)
+        guard let overlay = overlayView as? PageOverlayView, canvases[page] === overlay.canvas else { return }
+        toolPicker?.removeObserver(overlay.canvas)
         canvases[page] = nil
     }
 
@@ -216,8 +264,9 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
         onChange?(page, previous, updated)
     }
 
-    private func makeCanvas() -> PageCanvasView {
-        let canvas = PageCanvasView()
+    private func makeOverlay() -> PageOverlayView {
+        let overlay = PageOverlayView(frame: .zero)
+        let canvas = overlay.canvas
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
         // iPad: the pencil draws and fingers scroll. iPhone has no pencil, so a finger draws.
@@ -225,6 +274,7 @@ final class DrawingOverlays: NSObject, PDFPageOverlayViewProvider, PKCanvasViewD
         canvas.isScrollEnabled = false
         canvas.delegate = self
         canvas.onResize = { [weak self] canvas in self?.sync(canvas) }
-        return canvas
+        overlay.apply(tint)
+        return overlay
     }
 }

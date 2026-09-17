@@ -4,6 +4,11 @@ import UniformTypeIdentifiers
 
 @main
 struct OptiPDFApp: App {
+    init() {
+        DocumentLibrary.shared.prepare()
+        DiagnosticsCollector.shared.start()
+    }
+
     var body: some Scene {
 #if READER_PROBE
         WindowGroup { ReaderPreview() }
@@ -40,6 +45,8 @@ final class PDFFile: ReferenceFileDocument {
     let pdf: PDFDocument
     /// Large PDFs keep OptiPDF's notes and drawings in a side file instead of being rewritten (AnnotationSidecar).
     private(set) var sidecar: AnnotationSidecar?
+    /// Last page and bookmarks; nil for a document that was just created.
+    private(set) var reading: ReadingState?
 
 #if DEBUG
     init(preview: Bool) {
@@ -72,8 +79,10 @@ final class PDFFile: ReferenceFileDocument {
             throw CocoaError(.fileReadCorruptFile)
         }
         pdf = document
+        let key = AnnotationSidecar.key(for: data)
+        reading = ReadingState(key: key, directory: DocumentLibrary.shared.directory)
         if document.pageCount > AnnotationSidecar.pageThreshold {
-            let store = AnnotationSidecar(key: AnnotationSidecar.key(for: data), sourceData: data)
+            let store = AnnotationSidecar(key: key, sourceData: data)
             store.apply(to: document)
             sidecar = store
         }
