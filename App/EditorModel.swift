@@ -128,7 +128,7 @@ enum ServiceError: LocalizedError {
     }
 }
 
-/// The OptiCeviri server's streaming chat endpoint (Fable or Astra): text arrives piece by piece.
+/// The OptiCeviri server's streaming chat endpoint (Opus 5.5 or Astra): text arrives piece by piece.
 struct OptiService {
     static let shared = OptiService()
     let baseURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "OptiCeviriBaseURL") as? String ?? "")
@@ -292,9 +292,9 @@ final class EditorModel: ObservableObject {
         }
         let onDevice = engine == "device"
         var next = AIResult(title: request.title, source: source, isTranslation: request.isTranslation, onDevice: onDevice,
-                            engineName: onDevice ? "Cihazda" : (engine == "astra" ? "Astra" : "Fable"))
+                            engineName: onDevice ? "Cihazda" : (engine == "astra" ? "Astra" : "Opus 5.5"))
         if onDevice && !request.isTranslation {
-            next.error = "Cihazda modunda yalnızca çeviri çalışır. Açıklama, özet ve soru için Fable veya Astra seç."
+            next.error = "Cihazda modunda yalnızca çeviri çalışır. Açıklama, özet ve soru için Opus 5.5 veya Astra seç."
         }
         next.streaming = !onDevice
         result = next

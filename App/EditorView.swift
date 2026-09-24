@@ -9,7 +9,7 @@ struct EditorView: View {
     @Environment(\.undoManager) private var undoManager
     @Environment(\.horizontalSizeClass) private var sizeClass
     @AppStorage("targetLanguage") private var target = "tr"
-    @AppStorage("engine") private var engine = "fable"
+    @AppStorage("engine") private var engine = "opus"
     @State private var searchText = ""
     @State private var question = ""
     @State private var asking = false
@@ -232,7 +232,7 @@ struct EditorView: View {
             }
         }
         Picker("Motor", selection: $engine) {
-            Text("Fable (en iyi kalite)").tag("fable")
+            Text("Opus 5.5 (en iyi kalite)").tag("opus")
             Text("Astra (hızlı)").tag("astra")
             Text("Cihazda (hassas belgeler)").tag("device")
         }

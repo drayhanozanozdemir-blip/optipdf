@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 @main
 struct OptiPDFApp: App {
     init() {
+        // Opus 5.5 replaced Fable on the OptiCeviri server; move the stored choice along.
+        if UserDefaults.standard.string(forKey: "engine") == "fable" { UserDefaults.standard.set("opus", forKey: "engine") }
         DocumentLibrary.shared.prepare()
         DiagnosticsCollector.shared.start()
     }
