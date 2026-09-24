@@ -13,8 +13,6 @@ struct EditorView: View {
     @State private var searchText = ""
     @State private var question = ""
     @State private var asking = false
-    @State private var noteDraft = ""
-    @State private var addingNote = false
     @State private var showPages = false
     @State private var showOutline = false
     @State private var showBookmarks = false
@@ -38,6 +36,7 @@ struct EditorView: View {
                         .padding(.bottom, 76)
                 }
             }
+            .overlay(alignment: .bottom) { MarkLayer(model: model, compact: compact) }
             .overlay(alignment: .top) { topOverlays }
             .overlay(alignment: .bottomLeading) { pageIndicator }
             .overlay(alignment: .bottomTrailing) {
@@ -123,14 +122,6 @@ struct EditorView: View {
             } message: {
                 Text(model.selectionText == nil ? "Cevap bu sayfanın metnine dayanır." : "Cevap seçili metne dayanır.")
             }
-            .alert("Not ekle", isPresented: $addingNote) {
-                TextField("Not", text: $noteDraft)
-                Button("Kaydet") {
-                    model.controller?.markSelection(.highlight, note: noteDraft)
-                    noteDraft = ""
-                }
-                Button("Vazgeç", role: .cancel) { noteDraft = "" }
-            }
     }
 
     @ToolbarContentBuilder
@@ -145,7 +136,7 @@ struct EditorView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: compact ? 190 : 300)
+            .frame(width: compact ? 200 : 340)
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if compact {
@@ -253,6 +244,7 @@ struct EditorView: View {
         VStack(spacing: 8) {
             if model.fullscreen && model.hudVisible { fullscreenBar }
             if model.tool == .draw && (!model.fullscreen || model.hudVisible) { drawBar }
+            if model.tool == .highlight && (!model.fullscreen || model.hudVisible) { HighlightColorStrip(model: model) }
             if let toast = model.toast {
                 Text(toast)
                     .font(.callout)
@@ -348,7 +340,7 @@ struct EditorView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             selectionBar
         }
-        .frame(maxWidth: 560)
+        .frame(maxWidth: 640)
         .frame(height: compact ? 58 : 66)
         .background(.regularMaterial, in: Capsule())
         .shadow(radius: 8, y: 2)
@@ -359,10 +351,10 @@ struct EditorView: View {
             barButton("Çevir", "character.bubble") { model.run(.translate, engine: engine, target: target) }
             barButton("Açıkla", "sparkles") { model.run(.explain, engine: engine, target: target) }
             Divider().frame(height: 28)
-            barButton("Vurgula", "highlighter") { model.controller?.markSelection(.highlight) }
+            HighlightDots(compact: compact) { color in model.controller?.markSelection(.highlight, color: color.highlightColor) }
             barButton("Altını çiz", "underline") { model.controller?.markSelection(.underline) }
             barButton("Üstünü çiz", "strikethrough") { model.controller?.markSelection(.strikeOut) }
-            barButton("Not", "note.text.badge.plus") { addingNote = true }
+            barButton("Not", "note.text.badge.plus") { model.controller?.requestNoteForSelection() }
             barButton("Kopyala", "doc.on.doc") {
                 UIPasteboard.general.string = model.selectionText
                 model.controller?.clearSelection()
@@ -465,6 +457,7 @@ struct ResultSheet: View {
             .navigationTitle(model.result?.title ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) { ResultNoteButton(model: model) }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Kopyala") {
                         UIPasteboard.general.string = model.result?.output
@@ -550,83 +543,5 @@ struct TextEntrySheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-}
-
-struct NotesPanel: View {
-    @ObservedObject var model: EditorModel
-    let engine: String
-    let target: String
-    @State private var editing: NoteItem?
-    @State private var draft = ""
-
-    var body: some View {
-        List {
-            Section {
-                HStack {
-                    Button {
-                        model.run(.summarizeNotes, engine: engine, target: target)
-                    } label: {
-                        Label("Notları özetle", systemImage: "sparkles")
-                    }
-                    .disabled(model.notes.isEmpty || model.notesLoading)
-                    Spacer()
-                    ShareLink(item: model.markdownExport()) {
-                        Label("Dışa aktar", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(model.notes.isEmpty || model.notesLoading)
-                }
-                .buttonStyle(.borderless)
-            }
-            if model.notesLoading {
-                ProgressView("Notlar yükleniyor…")
-            } else if model.notes.isEmpty {
-                Text("Henüz not yok. Seç ile metni işaretle, Vurgula veya Not ekle.")
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(model.notes) { item in
-                Button {
-                    model.controller?.show(item.first)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(item.kind).font(.caption.bold())
-                            Spacer()
-                            Text("S. \(item.pageIndex + 1)").font(.caption).foregroundStyle(.secondary)
-                        }
-                        if !item.quote.isEmpty {
-                            Text("“\(item.quote)”").font(.callout).italic().lineLimit(5)
-                        }
-                        if !item.note.isEmpty {
-                            Text(item.note).font(.callout)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                .swipeActions {
-                    Button(role: .destructive) {
-                        model.controller?.remove(item.pairs, actionName: "Sil")
-                    } label: {
-                        Label("Sil", systemImage: "trash")
-                    }
-                    Button {
-                        draft = item.note
-                        editing = item
-                    } label: {
-                        Label("Not", systemImage: "square.and.pencil")
-                    }
-                    .tint(.blue)
-                }
-            }
-        }
-        .navigationTitle("Notlar")
-        .alert("Not", isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
-            TextField("Not", text: $draft)
-            Button("Kaydet") {
-                if let item = editing { model.controller?.setNote(draft, on: item.first) }
-                editing = nil
-            }
-            Button("Vazgeç", role: .cancel) { editing = nil }
-        }
     }
 }

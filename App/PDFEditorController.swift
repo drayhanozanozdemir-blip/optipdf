@@ -85,7 +85,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     var sidecar: AnnotationSidecar?
     var reading: ReadingState?
     private let notesUndo = UndoManager()
-    private var editUndo: UndoManager? { sidecar == nil ? undo : notesUndo }
+    var editUndo: UndoManager? { sidecar == nil ? undo : notesUndo }
     var exportName = "OptiPDF"
 
     private let overlays = DrawingOverlays()
@@ -143,6 +143,8 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }()
     private let findRelay = FindRelay()
     private var findMatches: [PDFSelection] = []
+    /// Vurgu tool, tapped-mark bar and note targets (HighlightTool.swift).
+    lazy var highlighter = HighlightInteraction(controller: self)
     private var findUpdate: (([PDFSelection], Bool) -> Void)?
     private var findJumped = false
     private var findDeliveryScheduled = false
@@ -158,7 +160,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     private var pencilGlideVelocity = CGPoint.zero
     private var pencilGlideTime: CFTimeInterval = 0
     private weak var keyboardFocusScrollView: UIScrollView?
-    private var readerPencilTouchTypes: [NSNumber] {
+    var readerPencilTouchTypes: [NSNumber] {
 #if DEBUG
         if UserDefaults.standard.bool(forKey: "readerProbePencil") {
             return [NSNumber(value: UITouch.TouchType.direct.rawValue)]
@@ -348,6 +350,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         pdfView.addGestureRecognizer(hudTap)
         hudTap.require(toFail: pencilWordTap)
         pencilScroll.require(toFail: pencilSelect)
+        highlighter.install(after: pencilWordTap, before: hudTap)
         let pencil = UIPencilInteraction()
         pencil.delegate = self
         view.addInteraction(pencil)
@@ -398,6 +401,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             scrollView?.panGestureRecognizer.allowedTouchTypes = [pointer]
         }
 #endif
+        highlighter.apply(tool: newTool, scroll: scrollView)
         if drawing { clearSelection() }
     }
 
@@ -618,6 +622,10 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         case .changed, .ended:
             guard let start = selectionStart else { return }
             let moved = start.page !== page || hypot(point.x - start.point.x, point.y - start.point.y) > 3
+            if gesture.state == .ended, !moved, tool == .select, openMark(atViewPoint: location) {
+                selectionStart = nil
+                return
+            }
             let selection = moved
                 ? document.selection(from: start.page, at: start.point, to: page, at: point)
                 : start.word
@@ -846,14 +854,18 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     // MARK: Annotations
 
-    func markSelection(_ subtype: PDFAnnotationSubtype, note: String? = nil) {
-        guard let selection = pdfView.currentSelection else { return }
-        let stamp = Date()
+    /// One annotation per text line, all with one stamp. Highlight hooks: an explicit colour and selection (the Vurgu
+    /// tool, "Nota ekle"), whole-second increasing stamps (MarkStamp) and one quad per line for other PDF readers.
+    @discardableResult
+    func markSelection(_ subtype: PDFAnnotationSubtype, note: String? = nil, color custom: UIColor? = nil,
+                       selection explicit: PDFSelection? = nil) -> [(PDFPage, PDFAnnotation)] {
+        guard let selection = explicit ?? pdfView.currentSelection else { return [] }
+        let stamp = MarkStamp.next()
         let color: UIColor
         switch subtype {
-        case .underline: color = .systemBlue
-        case .strikeOut: color = .systemRed
-        default: color = UIColor.systemYellow.withAlphaComponent(0.5)
+        case .underline: color = custom ?? .systemBlue
+        case .strikeOut: color = custom ?? .systemRed
+        default: color = custom ?? HighlightColor.last.highlightColor
         }
         var added: [(PDFPage, PDFAnnotation)] = []
         for line in selection.selectionsByLine() {
@@ -864,12 +876,14 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
                 annotation.userName = AnnotationSidecar.marker
                 annotation.color = color
                 annotation.modificationDate = stamp
+                annotation.quadrilateralPoints = MarkGeometry.quad(for: bounds)
                 if added.isEmpty, let note, !note.isEmpty { annotation.contents = note }
                 added.append((page, annotation))
             }
         }
         add(added, actionName: "İşaretleme")
         clearSelection()
+        return added
     }
 
     /// A text box whose top-left corner is where the user tapped.
@@ -910,6 +924,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     func remove(_ items: [(PDFPage, PDFAnnotation)], actionName: String) {
         guard !items.isEmpty else { return }
         for (page, annotation) in items { page.removeAnnotation(annotation) }
+        if let mark = model?.activeMark, items.contains(where: { $0.1 === mark.first }) { model?.activeMark = nil }
         editUndo?.registerUndo(withTarget: self) { controller in controller.add(items, actionName: actionName) }
         editUndo?.setActionName(actionName)
         notesChanged(on: items.map(\.0))
@@ -947,7 +962,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         notesChanged(on: [page])
     }
 
-    private func notesChanged(on pages: [PDFPage]) {
+    func notesChanged(on pages: [PDFPage]) {
         guard let sidecar else { return }
         let count = document.pageCount
         sidecar.pagesChanged(pages.map { document.index(for: $0) }.filter { $0 >= 0 && $0 < count })

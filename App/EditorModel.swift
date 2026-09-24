@@ -4,12 +4,13 @@ import NaturalLanguage
 import Translation
 
 enum EditorTool: String, CaseIterable, Identifiable {
-    case navigate, select, draw, text
+    case navigate, select, highlight, draw, text
     var id: String { rawValue }
     var title: String {
         switch self {
         case .navigate: return "Gez"
         case .select: return "Seç"
+        case .highlight: return "Vurgu"
         case .draw: return "Çiz"
         case .text: return "Yazı"
         }
@@ -18,6 +19,7 @@ enum EditorTool: String, CaseIterable, Identifiable {
         switch self {
         case .navigate: return "hand.point.up.left"
         case .select: return "character.cursor.ibeam"
+        case .highlight: return "highlighter"
         case .draw: return "pencil.tip"
         case .text: return "textformat"
         }
@@ -226,6 +228,13 @@ final class EditorModel: ObservableObject {
         didSet { controller?.setShapeSnap(shapeSnap) }
     }
     @Published var textPlacement: TextPlacement?
+    // Highlight hooks (HighlightTool.swift): the tapped mark whose action bar is open, the note sheet, and what
+    // "Nota ekle" in the result sheet attaches to.
+    @Published var activeMark: NoteItem? {
+        didSet { controller?.highlighter.refreshOutline() }
+    }
+    @Published var noteEditor: NoteEditorRequest?
+    var resultNote: NoteTarget?
     @Published var toast: String?
     weak var controller: PDFEditorController?
     private var streamTask: Task<Void, Never>?
@@ -280,9 +289,10 @@ final class EditorModel: ObservableObject {
         }
     }
 
-    func run(_ action: AIAction, engine: String, target: String) {
+    /// `quote` is the text of a tapped mark (Çevir in its action bar); otherwise the selection is used.
+    func run(_ action: AIAction, engine: String, target: String, quote: String? = nil) {
         guard let controller else { return }
-        let request = action.request(selection: selectionText ?? "", page: controller.currentPageText(), notes: markdownExport())
+        let request = action.request(selection: quote ?? selectionText ?? "", page: controller.currentPageText(), notes: markdownExport())
         let source = request.source.trimmingCharacters(in: .whitespacesAndNewlines)
         streamTask?.cancel()
         guard !source.isEmpty else {
@@ -298,6 +308,7 @@ final class EditorModel: ObservableObject {
         }
         next.streaming = !onDevice
         result = next
+        resultNote = controller.noteTarget(for: action, quote: quote)
         guard !onDevice else { return }
         let id = next.id
         streamTask = Task {
@@ -370,14 +381,14 @@ final class EditorModel: ObservableObject {
         }
     }
 
-    private static func appendNotes(from document: PDFDocument, at index: Int, to items: inout [NoteItem]) {
+    static func appendNotes(from document: PDFDocument, at index: Int, to items: inout [NoteItem]) {
         guard let page = document.page(at: index) else { return }
         for annotation in page.annotations where !DrawingStorage.isStorage(annotation) {
             let type = (annotation.type ?? "").replacingOccurrences(of: "/", with: "")
             guard let kind = NoteItem.kinds[type] else { continue }
             let quote: String
             switch type {
-            case "Ink": quote = ""
+            case "Ink", "Text": quote = ""
             case "FreeText": quote = annotation.contents ?? ""
             default: quote = (page.selection(for: annotation.bounds)?.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             }
@@ -394,14 +405,6 @@ final class EditorModel: ObservableObject {
         }
     }
 
-    func markdownExport() -> String {
-        var lines = ["# Notlar"]
-        for item in notes {
-            lines.append("")
-            lines.append("**S. \(item.pageIndex + 1) · \(item.kind)**")
-            if !item.quote.isEmpty { lines.append("> " + item.quote.replacingOccurrences(of: "\n", with: " ")) }
-            if !item.note.isEmpty { lines.append(item.note) }
-        }
-        return lines.joined(separator: "\n")
-    }
+    /// Grouped by page, with each mark's colour (NotesPanel.swift).
+    func markdownExport() -> String { NotesExport.markdown(notes) }
 }
