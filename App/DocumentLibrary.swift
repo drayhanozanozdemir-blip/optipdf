@@ -44,15 +44,18 @@ struct Bookmark: Codable, Identifiable, Hashable {
     let added: Date
 }
 
-/// Last page and bookmarks of one document, saved as JSON next to its notes.
+/// Last page, bookmarks and recent places of one document, saved as JSON next to its notes.
 final class ReadingState {
     private struct Stored: Codable {
         var lastPage: Int
         var bookmarks: [Bookmark]
+        /// Places left by jumps ("Son konumlar"); missing in files written before it existed.
+        var recent: [ReaderPosition]?
     }
 
     private(set) var lastPage: Int
     private(set) var bookmarks: [Bookmark]
+    private(set) var recentPositions: [ReaderPosition]
     private let fileURL: URL
     private let queue = DispatchQueue(label: "ch.ozan.optipdf.reading", qos: .utility)
     private var pending: DispatchWorkItem?
@@ -62,6 +65,7 @@ final class ReadingState {
         let stored = (try? Data(contentsOf: fileURL)).flatMap { try? JSONDecoder().decode(Stored.self, from: $0) }
         lastPage = stored?.lastPage ?? 0
         bookmarks = stored?.bookmarks ?? []
+        recentPositions = stored?.recent ?? []
     }
 
     func setLastPage(_ page: Int) {
@@ -91,6 +95,12 @@ final class ReadingState {
         scheduleSave()
     }
 
+    func setRecentPositions(_ positions: [ReaderPosition]) {
+        guard positions != recentPositions else { return }
+        recentPositions = positions
+        scheduleSave()
+    }
+
     /// Writes one second after the last change.
     private func scheduleSave() {
         pending?.cancel()
@@ -102,7 +112,7 @@ final class ReadingState {
     func saveNow() {
         pending?.cancel()
         pending = nil
-        let stored = Stored(lastPage: lastPage, bookmarks: bookmarks)
+        let stored = Stored(lastPage: lastPage, bookmarks: bookmarks, recent: recentPositions)
         let url = fileURL
         queue.async {
             guard let data = try? JSONEncoder().encode(stored) else { return }
