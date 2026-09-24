@@ -6,9 +6,10 @@ import UIKit.UIGestureRecognizerSubclass
 /// when a finger touches the page, and fades out 1.5 s later; in fullscreen it shows only with the controls.
 /// Dragging its thumb jumps through the book with a bubble "S. 245 · Kapitel"; letting go is one jump in the history.
 ///
-/// Its gesture sits on the PDF view and only takes finger and pointer touches that start on the visible thumb (44 pt
-/// wide), so Pencil drawing, Pencil scrolling and gliding, text selection and keyboard focus stay as they were. It
-/// also follows link taps for the jump history.
+/// Only the visible thumb (44 pt wide) takes touches, by hit-testing: a touch anywhere else, or any touch while the
+/// scrubber is hidden, goes to the page as before, so finger and Pencil scrolling, gliding, drawing, text selection
+/// and keyboard focus stay as they were. The thumb takes fingers and pointers; a Pencil passes through where UIKit
+/// reports its type during hit-testing. It also follows link taps for the jump history.
 @MainActor
 final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
     /// Live jumps while dragging, at most this often; the last position always follows on release.
@@ -81,9 +82,10 @@ final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         host.insertSubview(overlay, aboveSubview: controller.pdfView)
         overlay.onLayout = { [weak self] in self?.layoutIfShown() }
+        overlay.acceptsTouch = { [weak self] point, event in self?.accepts(point, event) ?? false }
         overlay.onAppear = { [weak self] in self?.suppress(for: 1.2) }
         overlay.track.onAdjust = { [weak self] step in self?.adjust(by: step) }
-        controller.pdfView.addGestureRecognizer(drag)
+        overlay.addGestureRecognizer(drag)
         controller.pdfView.addGestureRecognizer(touchWatch)
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(pageChanged), name: .PDFViewPageChanged, object: controller.pdfView)
@@ -103,6 +105,12 @@ final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
     func claims(_ touch: UITouch) -> Bool {
         guard isShown, touch.type == .direct || touch.type == .indirectPointer, !phoneDrawing else { return false }
         return thumbHitFrame().contains(touch.location(in: overlay))
+    }
+
+    /// Hit-testing of the overlay: only the visible thumb, never a Pencil touch UIKit already reports.
+    private func accepts(_ point: CGPoint, _ event: UIEvent?) -> Bool {
+        guard isShown, !phoneDrawing, thumbHitFrame().contains(point) else { return false }
+        return !(event?.allTouches?.contains { $0.type == .pencil } ?? false)
     }
 
     // MARK: Showing and hiding
@@ -299,10 +307,8 @@ final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
             liveJumpPage = dragStart?.page ?? -1
             bubblePage = -1
             dragAnchor = y - ScrubberOverlay.thumbCenterY(track: trackFrame(), fraction: fraction)
-            if let scroll = observedScroll {
-                if scroll.isDecelerating { scroll.setContentOffset(scroll.contentOffset, animated: false) }
-                // No scrolling under the finger while it holds the thumb.
-                scroll.panGestureRecognizer.isEnabled = false
+            if let scroll = observedScroll, scroll.isDecelerating {
+                scroll.setContentOffset(scroll.contentOffset, animated: false)
             }
             navigation?.prepareChapters()
             if controller.model?.fullscreen == true { controller.model?.showHUD() }
@@ -368,7 +374,6 @@ final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
     private func endDrag() {
         guard dragging else { return }
         dragging = false
-        observedScroll?.panGestureRecognizer.isEnabled = true
         if targetPage != liveJumpPage { jump(to: targetPage) }
         if let start = dragStart { navigation?.record(from: start, to: targetPage, kind: .scrub) }
         dragStart = nil
@@ -445,7 +450,7 @@ final class TouchWatchGesture: UIGestureRecognizer {
     }
 }
 
-/// The scrubber's views. They never take touches (PageScrubber's gesture on the PDF view does).
+/// The scrubber's views. The overlay covers the reader but only the visible thumb is hit-testable (`acceptsTouch`).
 final class ScrubberOverlay: UIView {
     static let thumbSize = CGSize(width: 6, height: 44)
     static let activeThumb = CGSize(width: 10, height: 52)
@@ -462,6 +467,11 @@ final class ScrubberOverlay: UIView {
     private var lastFraction: CGFloat = 0
     var onLayout: (() -> Void)?
     var onAppear: (() -> Void)?
+    var acceptsTouch: ((CGPoint, UIEvent?) -> Bool)?
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        acceptsTouch?(point, event) ?? false
+    }
 
     static func thumbCenterY(track: CGRect, fraction: CGFloat) -> CGFloat {
         track.minY + activeThumb.height / 2 + fraction * max(0, track.height - activeThumb.height)
@@ -469,7 +479,6 @@ final class ScrubberOverlay: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        isUserInteractionEnabled = false
         backgroundColor = .clear
         alpha = 0
         accessibilityElementsHidden = true
