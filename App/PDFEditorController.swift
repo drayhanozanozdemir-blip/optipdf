@@ -178,7 +178,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
 
     override var undoManager: UndoManager? { sidecar == nil ? super.undoManager : notesUndo }
 
-    private var keyboardNavigationAvailable: Bool {
+    var keyboardNavigationAvailable: Bool {
         guard let window = viewIfLoaded?.window, model?.showNotes != true else { return false }
         func editingText(in view: UIView) -> Bool {
             if view.isFirstResponder {
@@ -216,7 +216,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             command.discoverabilityTitle = title
             command.wantsPriorityOverSystemBehavior = true
             return command
-        }
+        } + navigationKeyCommands // ux-navigation hook: ⌘[ ⌘] ⌘L
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
@@ -280,7 +280,14 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
             "codes": ReaderKeyTrace.codes,
             "queries": keyboardCommandQueries,
             "actions": keyboardActionCount,
-            "presses": keyboardPressCount
+            "presses": keyboardPressCount,
+            // ux-navigation probe state
+            "page": model?.currentPage ?? -1,
+            "scrubber": model?.navigation.scrubber?.probeState ?? [:],
+            "back": model?.navigation.history.back.map(\.page) ?? [],
+            "forward": model?.navigation.history.forward.map(\.page) ?? [],
+            "capsule": model?.navigation.capsuleVisible ?? false,
+            "chapter": model.flatMap { $0.navigation.chapterTitle(for: $0.currentPage) } ?? ""
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) else { return "{}" }
         return String(decoding: data, as: UTF8.self)
@@ -360,6 +367,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
                                                name: UIApplication.didEnterBackgroundNotification, object: nil)
         applyDisplay(model?.displayMode ?? "continuous")
         apply(tool: model?.tool ?? tool, force: true)
+        installNavigation() // ux-navigation hook: page scrubber, jump history, link jumps
         DispatchQueue.main.async { [weak self] in
             self?.pageChanged()
         }
@@ -444,10 +452,12 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard gestureRecognizer === hudTap else { return true }
+        // ux-navigation hook: a finger on the visible page scrubber belongs to the scrubber only.
+        let scrubberTouch = model?.navigation.scrubber?.claims(touch) == true
+        guard gestureRecognizer === hudTap else { return !scrubberTouch }
         // Any new touch on the page stops a pencil glide, as it stops a finger flick.
         stopPencilGlide()
-        return model?.fullscreen == true && model?.selectionText == nil && tool != .text
+        return !scrubberTouch && model?.fullscreen == true && model?.selectionText == nil && tool != .text
             && (touch.type != .pencil || tool == .navigate)
             && !(tool == .draw && UIDevice.current.userInterfaceIdiom == .phone)
     }
@@ -513,7 +523,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         model?.bookmarks = reading?.bookmarks ?? []
     }
 
-    private var scrollView: UIScrollView? {
+    var scrollView: UIScrollView? {
         func find(_ view: UIView) -> UIScrollView? {
             if view is PKCanvasView { return nil }
             if let scroll = view as? UIScrollView { return scroll }
@@ -730,6 +740,7 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
         pdfView.highlightedSelections = findMatches
         if !findJumped, let first = findMatches.first {
             findJumped = true
+            noteJump(to: first.pages.first, kind: .search) // ux-navigation hook
             pdfView.go(to: first)
         }
         update(findMatches, finished)
@@ -737,21 +748,30 @@ final class PDFEditorController: UIViewController, UIPencilInteractionDelegate, 
     }
 
     func show(_ selection: PDFSelection) {
+        noteJump(to: selection.pages.first, kind: .search) // ux-navigation hook
         pdfView.go(to: selection)
         pdfView.setCurrentSelection(selection, animate: true)
     }
 
     func show(_ annotation: PDFAnnotation) {
         guard let page = annotation.page else { return }
+        noteJump(to: page) // ux-navigation hook
         pdfView.go(to: annotation.bounds, on: page)
     }
 
-    func go(to destination: PDFDestination) { pdfView.go(to: destination) }
+    func go(to destination: PDFDestination) {
+        noteJump(to: destination.page) // ux-navigation hook
+        pdfView.go(to: destination)
+    }
 
     func goToPage(_ index: Int) {
         guard let page = document.page(at: index) else { return }
+        noteJump(to: page) // ux-navigation hook
         pdfView.go(to: page)
     }
+
+    /// ux-navigation hook: the part of `view` the tool picker covers, which the page scrubber keeps clear of.
+    var toolPickerCoverage: CGRect { toolPicker.isVisible ? toolPicker.frameObscured(in: view) : .null }
 
     func pageNumber(of selection: PDFSelection) -> Int {
         guard let page = selection.pages.first else { return 0 }

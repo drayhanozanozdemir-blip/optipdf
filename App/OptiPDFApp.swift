@@ -62,6 +62,23 @@ final class PDFFile: ReferenceFileDocument {
             }
         }
         pdf = PDFDocument(data: data)!
+        // Outline for the navigation probe: 20 chapters of 50 pages with a section every 10 pages.
+        let outline = PDFOutline()
+        for chapter in 0..<20 {
+            guard let start = pdf.page(at: chapter * 50) else { continue }
+            let item = PDFOutline()
+            item.label = "Kapitel \(chapter + 1): Hautkrankheiten \(chapter + 1)"
+            item.destination = PDFDestination(page: start, at: CGPoint(x: 0, y: bounds.maxY))
+            for section in 0..<5 {
+                guard let page = pdf.page(at: chapter * 50 + section * 10) else { continue }
+                let child = PDFOutline()
+                child.label = "\(chapter + 1).\(section + 1) Abschnitt"
+                child.destination = PDFDestination(page: page, at: CGPoint(x: 0, y: bounds.maxY))
+                item.insertChild(child, at: section)
+            }
+            outline.insertChild(item, at: chapter)
+        }
+        pdf.outlineRoot = outline
     }
 #endif
 

@@ -228,6 +228,8 @@ final class EditorModel: ObservableObject {
     @Published var textPlacement: TextPlacement?
     @Published var toast: String?
     weak var controller: PDFEditorController?
+    /// ux-navigation hook: page scrubber, jump history and "Sayfaya git" (ReaderNavigation.swift).
+    lazy var navigation = ReaderNavigation(model: self)
     private var streamTask: Task<Void, Never>?
     private var notesTask: Task<Void, Never>?
 

@@ -7,34 +7,41 @@ struct PageOrganizerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(0..<model.pageCount, id: \.self) { index in
-                    PageRow(model: model, index: index, revision: model.pageRevision)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            model.controller?.goToPage(index)
-                            dismiss()
-                        }
-                        .contextMenu {
-                            Button { model.controller?.rotatePage(index, by: -90) } label: {
-                                Label("Sola döndür", systemImage: "rotate.left")
+            ScrollViewReader { proxy in
+                List {
+                    ForEach(0..<model.pageCount, id: \.self) { index in
+                        PageRow(model: model, index: index, revision: model.pageRevision)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                model.controller?.goToPage(index)
+                                dismiss()
                             }
-                            Button { model.controller?.rotatePage(index, by: 90) } label: {
-                                Label("Sağa döndür", systemImage: "rotate.right")
+                            .contextMenu {
+                                Button { model.controller?.rotatePage(index, by: -90) } label: {
+                                    Label("Sola döndür", systemImage: "rotate.left")
+                                }
+                                Button { model.controller?.rotatePage(index, by: 90) } label: {
+                                    Label("Sağa döndür", systemImage: "rotate.right")
+                                }
+                                Button { model.controller?.duplicatePage(index) } label: {
+                                    Label("Çoğalt", systemImage: "plus.square.on.square")
+                                }
+                                Button { model.controller?.insertBlankPage(after: index) } label: {
+                                    Label("Arkasına boş sayfa ekle", systemImage: "doc.badge.plus")
+                                }
+                                Button(role: .destructive) { model.controller?.deletePages(IndexSet(integer: index)) } label: {
+                                    Label("Sil", systemImage: "trash")
+                                }
                             }
-                            Button { model.controller?.duplicatePage(index) } label: {
-                                Label("Çoğalt", systemImage: "plus.square.on.square")
-                            }
-                            Button { model.controller?.insertBlankPage(after: index) } label: {
-                                Label("Arkasına boş sayfa ekle", systemImage: "doc.badge.plus")
-                            }
-                            Button(role: .destructive) { model.controller?.deletePages(IndexSet(integer: index)) } label: {
-                                Label("Sil", systemImage: "trash")
-                            }
-                        }
+                    }
+                    .onMove { source, destination in model.controller?.movePages(from: source, to: destination) }
+                    .onDelete { offsets in model.controller?.deletePages(offsets) }
                 }
-                .onMove { source, destination in model.controller?.movePages(from: source, to: destination) }
-                .onDelete { offsets in model.controller?.deletePages(offsets) }
+                .onAppear {
+                    // 1500 pages: open where the reader is.
+                    let current = model.currentPage
+                    DispatchQueue.main.async { proxy.scrollTo(current, anchor: .center) }
+                }
             }
             .navigationTitle("Sayfalar (\(model.pageCount))")
             .navigationBarTitleDisplayMode(.inline)
@@ -46,11 +53,20 @@ struct PageOrganizerSheet: View {
     }
 }
 
+/// Rows appear lazily; thumbnails render off the main thread and come from an NSCache when scrolled back to
+/// (PageThumbnails in ReaderNavigation.swift).
 struct PageRow: View {
     @ObservedObject var model: EditorModel
     let index: Int
     let revision: Int
     @State private var thumbnail: UIImage?
+
+    init(model: EditorModel, index: Int, revision: Int) {
+        self.model = model
+        self.index = index
+        self.revision = revision
+        _thumbnail = State(initialValue: model.navigation.thumbnails.cached(index: index, revision: revision))
+    }
 
     var body: some View {
         HStack(spacing: 14) {
@@ -72,7 +88,15 @@ struct PageRow: View {
             Spacer()
         }
         .task(id: "\(index)-\(revision)") {
-            thumbnail = model.controller?.document.page(at: index)?.thumbnail(of: CGSize(width: 128, height: 172), for: .cropBox)
+            let thumbnails = model.navigation.thumbnails
+            if let cached = thumbnails.cached(index: index, revision: revision) {
+                thumbnail = cached
+                return
+            }
+            guard let document = model.controller?.document else { return }
+            if let rendered = await thumbnails.render(page: index, of: document, revision: revision) {
+                thumbnail = rendered
+            }
         }
     }
 }
@@ -105,12 +129,12 @@ struct OutlineSheet: View {
                         TextField("Sayfa numarası (1–\(model.pageCount))", text: $pageInput)
                             .keyboardType(.numberPad)
                         Button("Git") {
-                            if let number = Int(pageInput), number >= 1 {
-                                model.controller?.goToPage(number - 1)
+                            if let index = PageNumberInput.pageIndex(from: pageInput, pageCount: model.pageCount) {
+                                model.controller?.goToPage(index)
                                 dismiss()
                             }
                         }
-                        .disabled(Int(pageInput) == nil)
+                        .disabled(PageNumberInput.pageIndex(from: pageInput, pageCount: model.pageCount) == nil)
                     }
                 }
                 if let nodes, !nodes.isEmpty {

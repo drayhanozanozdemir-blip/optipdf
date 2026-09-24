@@ -51,6 +51,7 @@ struct EditorView: View {
                         Button("Sayfayı sığdır", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
                             model.controller?.fitPage()
                         }
+                        JumpMenuItems(navigation: model.navigation) // ux-navigation hook
                         navigationButtons
                         Section("Araçlar ve ayarlar") {
                             Picker("Araç", selection: $model.tool) {
@@ -114,6 +115,7 @@ struct EditorView: View {
                     Color.clear.sheet(isPresented: $showBookmarks) {
                         BookmarksSheet(model: model)
                     }
+                    ReaderNavigationSheets(model: model, navigation: model.navigation) // ux-navigation hook
                 }
             }
             .alert("Soru sor", isPresented: $asking) {
@@ -151,6 +153,7 @@ struct EditorView: View {
             if compact {
                 Menu {
                     Section { aiButtons }
+                    Section { JumpMenuItems(navigation: model.navigation) } // ux-navigation hook
                     Section { navigationButtons }
                     Section { settingsPickers }
                     fullscreenButton
@@ -264,23 +267,9 @@ struct EditorView: View {
         .padding(.top, model.fullscreen ? 14 : 8)
     }
 
-    @ViewBuilder
+    /// ux-navigation hook: chapter title, jump-back capsule; a tap opens "Sayfaya git" (ReaderNavigationViews.swift).
     private var pageIndicator: some View {
-        if model.pageCount > 0 && model.selectionText == nil && (!model.fullscreen || model.hudVisible) {
-            Button { showPages = true } label: {
-                HStack(spacing: 6) {
-                    if model.currentPageBookmarked { Image(systemName: "bookmark.fill").font(.caption) }
-                    Text("\(model.currentPage + 1) / \(model.pageCount)")
-                }
-                    .font(.callout.monospacedDigit())
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("reader.pageIndicator")
-            .padding(16)
-        }
+        ReaderPageIndicator(model: model, navigation: model.navigation, compact: compact)
     }
 
     private var fullscreenBar: some View {
