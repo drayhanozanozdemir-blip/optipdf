@@ -132,8 +132,9 @@ final class ReaderNavigation: ObservableObject {
         guard chapters == nil, !building, let document = model?.controller?.document else { return }
         building = true
         let revision = model?.pageRevision ?? 0
+        let source = OutlineSource(document: document)
         DispatchQueue.global(qos: .utility).async { [weak self] in
-            let index = ChapterIndex(document: document)
+            let index = ChapterIndex(document: source.document)
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.building = false
@@ -182,6 +183,8 @@ extension PDFEditorController {
             position.contentSize = scroll.contentSize
             position.scale = pdfView.scaleFactor
             position.mode = mode
+            let rect = pdfView.convert(page.bounds(for: pdfView.displayBox), from: page)
+            if rect.height > 1 { position.within = min(max(-rect.minY / rect.height, 0), 1) }
         }
         return position
     }
@@ -201,9 +204,16 @@ extension PDFEditorController {
             scroll.setContentOffset(target, animated: false)
             return
         }
-        if let page = document.page(at: min(max(position.page, 0), document.pageCount - 1)) {
-            pdfView.go(to: page)
-        }
+        guard let page = document.page(at: min(max(position.page, 0), document.pageCount - 1)) else { return }
+        pdfView.go(to: page)
+        // Zoom, layout or window size changed: the same spot on the page.
+        guard mode != "page", let within = position.within, within > 0, let scroll = scrollView else { return }
+        let rect = pdfView.convert(page.bounds(for: pdfView.displayBox), from: page)
+        guard rect.height > 1 else { return }
+        let inset = scroll.adjustedContentInset
+        let maximumY = max(-inset.top, scroll.contentSize.height - scroll.bounds.height + inset.bottom)
+        let y = min(maximumY, max(-inset.top, scroll.contentOffset.y + rect.minY + within * rect.height))
+        scroll.setContentOffset(CGPoint(x: scroll.contentOffset.x, y: y), animated: false)
     }
 
     /// ⌘[ back, ⌘] forward, ⌘L "Sayfaya git"; offered only when keyboardNavigationAvailable (README focus rules).
@@ -295,6 +305,12 @@ final class PageThumbnails {
     private static func key(_ index: Int, _ revision: Int) -> NSString {
         "\(revision)-\(index)" as NSString
     }
+}
+
+/// PDFKit reads the outline and page labels off the main thread; nothing mutates the document meanwhile except page
+/// edits, which rebuild the lookup (pageRevision).
+private struct OutlineSource: @unchecked Sendable {
+    let document: PDFDocument
 }
 
 private final class RenderTicket: @unchecked Sendable {

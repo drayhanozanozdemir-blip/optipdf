@@ -11,12 +11,14 @@ import UIKit.UIGestureRecognizerSubclass
 /// also follows link taps for the jump history.
 @MainActor
 final class PageScrubber: NSObject, UIGestureRecognizerDelegate {
-    static let hideDelay: CFTimeInterval = 1.5
     /// Live jumps while dragging, at most this often; the last position always follows on release.
     static let liveJumpInterval: CFTimeInterval = 0.06
 #if READER_PROBE
+    // The UI probe needs time to find the thumb and to photograph the bubble.
+    static let hideDelay: CFTimeInterval = 6
     static let bubbleLinger: TimeInterval = 3
 #else
+    static let hideDelay: CFTimeInterval = 1.5
     static let bubbleLinger: TimeInterval = 0.4
 #endif
 

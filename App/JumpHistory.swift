@@ -3,20 +3,23 @@ import CoreGraphics
 
 /// A place in the document precise enough to come back to: the page and, in the scrolling layouts, the exact scroll
 /// offset. The offset only counts while zoom, layout and window size are unchanged (PDFEditorController.restore);
-/// otherwise the page is used.
+/// otherwise the page and how far into it the view's top was (`within`, 0 = page top) are used.
 struct ReaderPosition: Codable, Equatable {
     var page: Int
     var offset: CGPoint?
     var contentSize: CGSize?
     var scale: CGFloat?
     var mode: String?
+    var within: CGFloat?
 
-    init(page: Int, offset: CGPoint? = nil, contentSize: CGSize? = nil, scale: CGFloat? = nil, mode: String? = nil) {
+    init(page: Int, offset: CGPoint? = nil, contentSize: CGSize? = nil, scale: CGFloat? = nil, mode: String? = nil,
+         within: CGFloat? = nil) {
         self.page = page
         self.offset = offset
         self.contentSize = contentSize
         self.scale = scale
         self.mode = mode
+        self.within = within
     }
 }
 
