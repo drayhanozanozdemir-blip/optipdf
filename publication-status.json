@@ -1,0 +1,38 @@
+{
+  "status": "ready",
+  "embedded_images": 7,
+  "unique_photos": 6,
+  "html_bytes": 2846725,
+  "photos": [
+    {
+      "url": "https://image-tc.galaxy.tf/wijpeg-3wxlu6vo5pablk102406iwqyt/falkensteiner-hotel-bozen-kulinarik-1920x1080-7.jpg?width=1920",
+      "bytes": 315688,
+      "sha256": "454b74907a91fef504b3af204c8b757eb5cb5e55362116ee8d7240c5b1599b3b"
+    },
+    {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/Reschensee_with_Graun_Church_tower_and_boat.jpg/1280px-Reschensee_with_Graun_Church_tower_and_boat.jpg",
+      "bytes": 283210,
+      "sha256": "ccde19a7c990502a71c090c80abf3a4b9f9cb29ae3cb2c755a2289ad39e6ff47"
+    },
+    {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/Lake_Carezza%2C_view_heading_South-East.jpg/1280px-Lake_Carezza%2C_view_heading_South-East.jpg",
+      "bytes": 247977,
+      "sha256": "b59fafcd4346c157f94d0afdb9a4740217fd0b613334c222efad8e43ae2a7acc"
+    },
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/11/Trauttmansdorff_Castle_Gardens_%284681400331%29.jpg/1280px-Trauttmansdorff_Castle_Gardens_%284681400331%29.jpg",
+      "bytes": 421422,
+      "sha256": "051ed9890f42cce17b21c20240ac4057d41d63f77e958bdb08075559ebace016"
+    },
+    {
+      "url": "https://www.suedtirol-tirol.com/uploads/img%2C_pac7670.jpg",
+      "bytes": 387187,
+      "sha256": "479be7ce7e48ef8aaf26a416432dafbbde5c06032f65e688733a6e8a3087b1c4"
+    },
+    {
+      "url": "https://www.suedtirol.info/en/en/experiences-and-events/culture-and-attractions/museums/south-tyrol-museum-of-archaeology/_jcr_content/root/containerStatic/articleLayoutCMPOne/imgVideo/item-1.coreimg.jpeg/1684486562717/bz--dpi5660.jpeg",
+      "bytes": 222119,
+      "sha256": "d7ba77023d76c0e43e03aec40b029f5a600190b5fca0851e311cc402877d102e"
+    }
+  ]
+}
