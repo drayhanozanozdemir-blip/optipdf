@@ -1,0 +1,80 @@
+name: Publish wellness hotel shortlist
+on:
+  push:
+    branches: [reise-suedtirol-2026]
+    paths: [update-wellness.py, .github/workflows/update-wellness.yml]
+permissions:
+  contents: write
+concurrency:
+  group: wellness-trip-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/reise-suedtirol-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: reise-suedtirol-2026
+      - name: Prepare original pool photographs and hotel cards
+        run: |
+          python -m pip install --quiet pillow beautifulsoup4 playwright
+          python update-wellness.py
+      - name: Publish complete page
+        run: |
+          git config user.name 'Trip page publisher'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html wellness-status.json
+          git commit -m 'Publish 6 Booking-checked wellness hotels with embedded original photos [skip ci]'
+          git push origin HEAD:reise-suedtirol-2026
+          echo "PUBLISHED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Install browser for image and mobile verification
+        run: python -m playwright install --with-deps chromium
+      - name: Verify public page without login
+        run: |
+          python - <<'PY'
+          import json, os, time
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          sha=os.environ['PUBLISHED_SHA']
+          base='https://raw.githubusercontent.com/drayhanozanozdemir-blip/optipdf/'+sha+'/index.html'
+          urls=['https://htmlpreview.github.io/?'+base,'https://rawcdn.githack.com/drayhanozanozdemir-blip/optipdf/'+sha+'/index.html']
+          report={'status':'not_tested','published_commit':sha,'public_url':urls[0]}
+          with sync_playwright() as pw:
+              browser=pw.chromium.launch(headless=True)
+              page=browser.new_page(viewport={'width':1440,'height':1000})
+              error=None
+              for url in urls:
+                  try:
+                      response=page.goto(url,wait_until='domcontentloaded',timeout=60000)
+                      page.wait_for_selector('.wellness-hotel',timeout=60000)
+                      page.wait_for_function("Array.from(document.images).every(i=>i.complete && i.naturalWidth>0)",timeout=45000)
+                      assert page.locator('.wellness-hotel').count()==6
+                      assert page.locator('a.booking-cta').count()==6
+                      desktop=page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                      page.set_viewport_size({'width':390,'height':844})
+                      page.wait_for_timeout(400)
+                      mobile=page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                      assert not desktop and not mobile
+                      page.locator('.wellness-filters button[data-region="meran"]').click()
+                      assert page.locator('.wellness-hotel:visible').count()==4
+                      page.locator('.wellness-filters button[data-region="all"]').click()
+                      assert page.locator('.wellness-hotel:visible').count()==6
+                      report.update(status='passed',public_url=url,public_without_login=True,http_status=response.status,loaded_images=page.locator('img').count(),hotel_cards=6,external_images=page.locator('img[src^="http"]').count(),mobile_horizontal_overflow=mobile,desktop_horizontal_overflow=desktop)
+                      break
+                  except Exception as exc:
+                      error=str(exc)
+              browser.close()
+          if report['status']!='passed': report['error']=error
+          Path('wellness-browser-check.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+          print(json.dumps(report,ensure_ascii=False),flush=True)
+          PY
+      - name: Save verification report
+        if: always()
+        run: |
+          if [ -f wellness-browser-check.json ]; then
+            git add wellness-browser-check.json
+            git commit -m 'Record public wellness page browser verification [skip ci]' || true
+            git push origin HEAD:reise-suedtirol-2026
+          fi
