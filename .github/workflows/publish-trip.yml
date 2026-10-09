@@ -1,0 +1,32 @@
+name: Prepare standalone Suedtirol trip page
+on:
+  create:
+  push:
+    branches: [reise-suedtirol-2026]
+    paths: [index.html, embed_photos.py, .github/workflows/publish-trip.yml]
+permissions:
+  contents: write
+concurrency:
+  group: standalone-suedtirol-page
+  cancel-in-progress: false
+jobs:
+  embed:
+    if: github.ref == 'refs/heads/reise-suedtirol-2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: reise-suedtirol-2026
+      - name: Embed and validate original photos
+        run: |
+          if [ ! -f publication-status.json ]; then python3 embed_photos.py; fi
+      - name: Publish completed self-contained HTML on this isolated branch
+        run: |
+          git config user.name 'Trip page publisher'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html publication-status.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Embed original Suedtirol trip photos [skip ci]'
+            git push origin HEAD:reise-suedtirol-2026
+          fi
