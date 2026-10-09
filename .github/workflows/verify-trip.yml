@@ -1,0 +1,77 @@
+name: Verify public birthday trip page
+on:
+  push:
+    branches: [reise-suedtirol-2026]
+    paths: [.github/workflows/verify-trip.yml]
+permissions:
+  contents: write
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: reise-suedtirol-2026
+      - name: Install isolated browser test environment
+        run: |
+          python3 -m venv /tmp/trip-browser
+          /tmp/trip-browser/bin/python -m pip install --quiet playwright
+          /tmp/trip-browser/bin/python -m playwright install chromium
+      - name: Check public URL and all images on mobile and desktop
+        run: |
+          /tmp/trip-browser/bin/python - <<'PY'
+          import json
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          source = json.loads(Path('publication-status.json').read_text())
+          url = source['public_url']
+          result = {'url': url, 'public_without_login': False}
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
+              page = browser.new_page(viewport={'width':390, 'height':844})
+              try:
+                  response = page.goto(url, wait_until='domcontentloaded', timeout=60000)
+                  result['http_status'] = response.status if response else None
+                  page.wait_for_selector('.hotel-grid', timeout=60000)
+                  page.wait_for_function('Array.from(document.images).filter(i=>i.complete&&i.naturalWidth>0).length === 7', timeout=30000)
+                  result['title'] = page.title()
+                  result['loaded_images'] = page.evaluate('Array.from(document.images).filter(i=>i.complete&&i.naturalWidth>0).length')
+                  result['external_images'] = page.evaluate('Array.from(document.images).filter(i=>!i.src.startsWith("data:image/")).length')
+                  result['mobile_horizontal_overflow'] = page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                  result['public_without_login'] = True
+                  page.screenshot(path='mobile-preview.png', full_page=True)
+                  page.set_viewport_size({'width':1280,'height':900})
+                  result['desktop_horizontal_overflow'] = page.evaluate('document.documentElement.scrollWidth>innerWidth')
+                  page.screenshot(path='desktop-preview.png', full_page=True)
+                  assert result['loaded_images'] == 7
+                  assert not result['mobile_horizontal_overflow']
+                  assert not result['desktop_horizontal_overflow']
+                  result['status'] = 'passed'
+              except Exception as exc:
+                  result['status'] = 'failed'
+                  result['error'] = str(exc)
+                  Path('browser-error.html').write_text(page.content())
+                  page.screenshot(path='browser-error.png', full_page=True)
+              browser.close()
+          Path('browser-check.json').write_text(json.dumps(result, indent=2))
+          print(json.dumps(result, indent=2))
+          PY
+      - name: Save verification report to travel branch only
+        run: |
+          git config user.name 'Trip page publisher'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add browser-check.json
+          git commit -m 'Record public mobile and desktop verification [skip ci]'
+          git push origin HEAD:reise-suedtirol-2026
+      - uses: actions/upload-artifact@v4
+        with:
+          name: suedtirol-page-and-previews
+          path: |
+            index.html
+            browser-check.json
+            mobile-preview.png
+            desktop-preview.png
+            browser-error.png
+            browser-error.html
+          retention-days: 3
