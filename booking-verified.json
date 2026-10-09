@@ -1,0 +1,157 @@
+{
+  "checked_on": "2026-10-09",
+  "checkin": "2026-11-07",
+  "checkout": "2026-11-11",
+  "adults": 2,
+  "rooms": 1,
+  "currency": "EUR",
+  "accommodations": [
+    {
+      "id": 419141,
+      "name": "Chalet Mirabell",
+      "url": "https://www.booking.com/hotel/it/geniesserhotel-mirabell.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 2782.8,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 163,
+        "review_score": 9.3,
+        "stars": 5,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 318111,
+      "name": "Hotel Quelle Nature Spa Resort",
+      "url": "https://www.booking.com/hotel/it/quelle-s-natur-spa-resort.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 2467.4,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 25,
+        "review_score": 9.7,
+        "stars": 5,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 313608,
+      "name": "La Maiena Meran Resort",
+      "url": "https://www.booking.com/hotel/it/la-maiena-life-resort.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 1767.6,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 211,
+        "review_score": 9.4,
+        "stars": 5,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 239994,
+      "name": "Hotel Hohenwart",
+      "url": "https://www.booking.com/hotel/it/hohenwart.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 1554.96,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 175,
+        "review_score": 9.2,
+        "stars": 4,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 80777,
+      "name": "Miramonti Boutique Hotel",
+      "url": "https://www.booking.com/hotel/it/granpanoramaresidencehotelmiramonti.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 2200.8,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 280,
+        "review_score": 9.7,
+        "stars": 5,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 6427757,
+      "name": "Falkensteiner Hotel Kronplatz - The Leading Hotels of the World",
+      "url": "https://www.booking.com/hotel/it/falkensteiner-kronplatz.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 1347.4,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 687,
+        "review_score": 9.2,
+        "stars": 5,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 1391324,
+      "name": "DER MESNERWIRT - 4 Superior - Meraner Land",
+      "url": "https://www.booking.com/hotel/it/der-mesnerwirt.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 918.68,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 175,
+        "review_score": 9,
+        "stars": 4,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 367760,
+      "name": "Viktoria Alpine Hideaway",
+      "url": "https://www.booking.com/hotel/it/viktoria-kg-d-platzer-manfred.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 2660,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 57,
+        "review_score": 9.4,
+        "stars": 4,
+        "stars_type": "official"
+      }
+    },
+    {
+      "id": 43367,
+      "name": "Terentnerhof 4*S active & lifestyle hotel",
+      "url": "https://www.booking.com/hotel/it/terentnerhof.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
+      "price": {
+        "book": 1632.19,
+        "currency": "EUR"
+      },
+      "rating": {
+        "number_of_reviews": 719,
+        "review_score": 9.6,
+        "stars": 4,
+        "stars_type": "official"
+      }
+    }
+  ],
+  "issues": [
+    {
+      "type": "unresolved_hotel_names",
+      "message": "Could not find these hotels in Booking.com inventory.",
+      "details": [
+        "Alpin Panorama Hotel Hubertus Olang"
+      ]
+    }
+  ],
+  "pool_qa": {
+    "answer": "Here’s the information regarding the outdoor infinity or panoramic pools for each hotel, focusing on their operation in November, particularly from the 7th to the 11th, 2026:\n\n1. **Falkensteiner Hotel Kronplatz**\n   - **Pool Type**: Rooftop pool\n   - **Heated**: Yes\n   - **Open in November**: Yes, typically open year-round.\n   - **Adult-Only Restrictions**: Certain areas of the spa are designated for adults only.\n\n2. **Terentnerhof 4*S active & lifestyle hotel**\n   - **Pool Type**: Outdoor pool\n   - **Heated**: Yes, but specific temperature not stated.\n   - **Open in November**: Yes, generally open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\n3. **Hotel Quelle Nature Spa Resort**\n   - **Pool Type**: Outdoor pools\n   - **Heated**: Yes\n   - **Open in November**: Yes, pools are open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\n4. **Miramonti Boutique Hotel**\n   - **Pool Type**: Heated infinity pool\n   - **Heated**: Yes\n   - **Open in November**: Yes, open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\n5. **Viktoria Alpine Hideaway**\n   - **Pool Type**: Infinity pool\n   - **Heated**: Yes\n   - **Open in November**: Yes, typically open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\n6. **Hotel Hohenwart**\n   - **Pool Type**: Indoor and outdoor pools\n   - **Heated**: Yes\n   - **Open in November**: Yes, generally open year-round.\n   - **Adult-Only Restrictions**: There is a wellness area for adults only (from 16 years).\n\n7. **DER MESNERWIRT - 4 Superior - Meraner Land**\n   - **Pool Type**: Outdoor pool\n   - **Heated**: Yes, but specific temperature not stated.\n   - **Open in November**: Yes, typically open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\n8. **Chalet Mirabell**\n   - **Pool Type**: Garden-side pool\n   - **Heated**: Yes\n   - **Open in November**: Yes, generally open year-round.\n   - **Adult-Only Restrictions**: No specific adult-only restrictions mentioned.\n\nIn summary, all listed hotels have outdoor pools that are heated and are typically open in November, including the specified dates. Most do not have adult-only restrictions, except for specific areas in some hotels. If you have any further questions or need additional details, feel free to ask!"
+  }
+}
