@@ -1,0 +1,146 @@
+{
+  "status": "images_embedded",
+  "hotel_count": 6,
+  "image_count": 11,
+  "prices_for": "2026-11-07 to 2026-11-11; 2 adults; 1 room; 4 nights",
+  "hotels": [
+    {
+      "name": "Miramonti Boutique Hotel",
+      "place": "Hafling · Meraner Land",
+      "region": "meran",
+      "price": 2054.35,
+      "score": "9,7",
+      "stars": "5 Sterne",
+      "badge": "Panorama-Favorit",
+      "tags": [
+        "Infinity-Pool ab 32 °C",
+        "Onsen",
+        "Waldsauna"
+      ],
+      "text": "Über dem Meraner Talkessel. Mein Favorit für Aussicht und Design.",
+      "slug": "granpanoramaresidencehotelmiramonti",
+      "source": "https://www.hotel-miramonti.com/en/mm-spa/infinity-pool/",
+      "image": "https://www.hotel-miramonti.com/site/assets/files/6142/church_of_st_kathrein_-_infinity_pool_6_c_patrick_schwienbacher.0x1060.jpg",
+      "credit": "MIRAMONTI / Patrick Schwienbacher",
+      "image_size": [
+        1200,
+        798
+      ]
+    },
+    {
+      "name": "Der Mesnerwirt",
+      "place": "Hafling · Meraner Land",
+      "region": "meran",
+      "price": 857.55,
+      "score": "9,0",
+      "stars": "4 Sterne Superior",
+      "badge": "Preis-Tipp",
+      "tags": [
+        "Infinity-Pool",
+        "Ganzjährig beheizt",
+        "Spa & Sauna"
+      ],
+      "text": "17 × 7 m Natur-Infinity-Pool und Blick Richtung Ifinger.",
+      "slug": "der-mesnerwirt",
+      "source": "https://www.mesnerwirt.it/en/wellness-vacation-avelengo-merano/infinity-pool/",
+      "image": "https://www.mesnerwirt.it/fileadmin/_processed_/8/a/csm_Mesnerwirt-Bio_infinitypool-Sonnenaufgang-Sonnenuntergang-Meran-hafling_8eb1e982a3.jpg",
+      "credit": "Hotel Mesnerwirt",
+      "image_size": [
+        1200,
+        675
+      ]
+    },
+    {
+      "name": "Falkensteiner Kronplatz",
+      "place": "Reischach / Bruneck · Pustertal",
+      "region": "pustertal",
+      "price": 1257.74,
+      "score": "9,2",
+      "stars": "5 Sterne",
+      "badge": "Rooftop & Design",
+      "tags": [
+        "Rooftop-Infinity-Pool",
+        "25-m-Sportpool",
+        "1.400 m² Spa"
+      ],
+      "text": "Kronplatz-Panorama, Hamam und Bergsauna. Nicht das Hotel in Bozen.",
+      "slug": "falkensteiner-kronplatz",
+      "source": "https://www.falkensteiner.com/hotel-kronplatz/wellness-spa",
+      "image": "https://image-tc.galaxy.tf/wijpeg-bz7istnn4rf44r3m93osbwk3w/falkensteiner-hotel-kronplatz-pool-1920x1080jpg.jpg?width=1920",
+      "credit": "Falkensteiner Hotels & Residences",
+      "image_size": [
+        1200,
+        675
+      ]
+    },
+    {
+      "name": "Terentnerhof",
+      "place": "Terenten · Pustertal",
+      "region": "pustertal",
+      "price": 1523.58,
+      "score": "9,6",
+      "stars": "4 Sterne Superior",
+      "badge": "Sky Pool",
+      "tags": [
+        "Infinity-Sky-Pool",
+        "Ganzjährig beheizt",
+        "XXL-Whirlpool"
+      ],
+      "text": "Dachterrasse mit Bergblick. 8 × 4 m Whirlpool mit 35 °C.",
+      "slug": "terentnerhof",
+      "source": "https://www.terentnerhof.com/en/panoramic-infinity-sky-pool/",
+      "image": "https://www.terentnerhof.com/wp-content/uploads/pool2-terentnerhof.jpg",
+      "credit": "Hotel Terentnerhof",
+      "image_size": [
+        900,
+        900
+      ]
+    },
+    {
+      "name": "Chalet Mirabell",
+      "place": "Hafling · Meraner Land",
+      "region": "meran",
+      "price": 2597.63,
+      "score": "9,3",
+      "stars": "5 Sterne",
+      "badge": "Luxus-Spa",
+      "tags": [
+        "33 °C Infinity-Pool",
+        "25-m-Sunset-Pool",
+        "6.000 m² Spa"
+      ],
+      "text": "Grosszügige Poollandschaft, Panorama-Saunen und Adults-only-Bereiche.",
+      "slug": "geniesserhotel-mirabell",
+      "source": "https://www.chalet-mirabell.com/de/day-spa-suedtirol/27-0.html",
+      "image": "https://www.chalet-mirabell.com/images/content/105792_11661_1_C_1920_1080_0_3696771/day-spa-suedtirol-wellnesshotel-mirabell-meran.jpg",
+      "credit": "Chalet Mirabell",
+      "image_size": [
+        1200,
+        675
+      ]
+    },
+    {
+      "name": "Viktoria Alpine Hideaway",
+      "place": "Hafling · Meraner Land",
+      "region": "meran",
+      "price": 2483.0,
+      "score": "9,4",
+      "stars": "4 Sterne",
+      "badge": "Wald & Wellness",
+      "tags": [
+        "25-m-Infinity-Pool",
+        "Adults-only Sky Pool",
+        "6.000 m² Spa"
+      ],
+      "text": "Am Waldrand: viel Grün, Saunen und Bergblick vom Pool.",
+      "slug": "viktoria-kg-d-platzer-manfred",
+      "source": "https://www.hotel-viktoria.com/en/living/good-to-know/",
+      "image": "https://www.hotel-viktoria.com/fileadmin/_processed_/8/5/csm_4-sterne-hotel-hafling-meran-suedtirol-0714_4e0eb6b410.jpg",
+      "credit": "Viktoria Alpine Hideaway",
+      "image_size": [
+        1200,
+        800
+      ]
+    }
+  ]
+}
