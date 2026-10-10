@@ -1,0 +1,34 @@
+{
+  "checked": "2026-10-10",
+  "plan": "one hotel, four nights",
+  "dates": [
+    "2026-11-07",
+    "2026-11-11"
+  ],
+  "birthday": "2026-11-09",
+  "preferred_base": "Meran/Schenna; Hafling alternative",
+  "max_hotel_total_chf": 1200,
+  "confirmed_hotel": null,
+  "maps_current_observations": {
+    "Schenna_Therme": {
+      "km": 4.9,
+      "minutes": 11
+    },
+    "Schenna_Bolzano": {
+      "km": 31.5,
+      "minutes": 32
+    },
+    "Schenna_Mellingen_via_Martina_Vereina": {
+      "km": 321,
+      "minutes": 306
+    }
+  },
+  "day_plan": {
+    "7": "arrival Reschensee and hotel",
+    "8": "optional gardens; Therme 14-17",
+    "9": "birthday and hotel spa",
+    "10": "optional Bolzano/Otzi; same hotel",
+    "11": "return via Martina/Vereina"
+  },
+  "old_split_stay_evidence": "historical only; does not price this plan"
+}
