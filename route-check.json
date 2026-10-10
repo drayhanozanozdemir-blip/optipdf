@@ -1,0 +1,36 @@
+{
+  "checked_on": "2026-10-10",
+  "gemini_thread": "https://gemini.google.com/app/ac4b6e7768a0476e",
+  "gemini_used_for": "Qualitative critique only; generated distances and legal statements were not accepted as verification.",
+  "maps_observations": {
+    "arrival_vereina": {
+      "km": 325,
+      "minutes": 315
+    },
+    "arrival_landeck": {
+      "km": 390,
+      "minutes": 334
+    },
+    "transfer_direct": {
+      "km": 119,
+      "minutes": 116
+    },
+    "transfer_bozen_centre": {
+      "km": 119,
+      "minutes": 127
+    },
+    "return_innsbruck_arlberg": {
+      "km": 428,
+      "minutes": 357
+    }
+  },
+  "times_context": "Current traffic at query, not future-date forecasts; return corridor waypoints may include local approaches.",
+  "links": {
+    "arrival": "https://www.google.com/maps/dir/?api=1&origin=Mellingen%2C+Switzerland&destination=Hotel+Mesnerwirt%2C+Kirchweg+2%2C+39010+Hafling&travelmode=driving&waypoints=Klosters+Selfranga+Autoverlad%7CSagliains+Autoverlad%7CTurm+im+Reschensee%2C+Graun",
+    "arrival_road": "https://www.google.com/maps/dir/?api=1&origin=Mellingen%2C+Switzerland&destination=Hotel+Mesnerwirt%2C+Kirchweg+2%2C+39010+Hafling&travelmode=driving&waypoints=Landeck%2C+Austria%7CTurm+im+Reschensee%2C+Graun",
+    "transfer": "https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt%2C+Kirchweg+2%2C+39010+Hafling&destination=Falkensteiner+Hotel+Kronplatz%2C+Seilbahnstrasse+1c%2C+Bruneck&travelmode=driving",
+    "transfer_bozen": "https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt%2C+Kirchweg+2%2C+39010+Hafling&destination=Falkensteiner+Hotel+Kronplatz%2C+Seilbahnstrasse+1c%2C+Bruneck&travelmode=driving&waypoints=Parcheggio+Piazza+Walther%2C+Bolzano",
+    "return": "https://www.google.com/maps/dir/?api=1&origin=Falkensteiner+Hotel+Kronplatz%2C+Seilbahnstrasse+1c%2C+Bruneck&destination=Mellingen%2C+Switzerland&travelmode=driving&waypoints=Innsbruck%2C+Austria%7CArlbergtunnel%2C+Austria"
+  },
+  "primary_sources": []
+}
