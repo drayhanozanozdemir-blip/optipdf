@@ -1,0 +1,18 @@
+{
+  "dates": [
+    "2026-11-07",
+    "2026-11-11"
+  ],
+  "adults": 2,
+  "rooms": 1,
+  "max_total_chf": 1200,
+  "checked": "2026-10-10",
+  "mesnerwirt_booking_total_chf": 855.09,
+  "mesnerwirt_google_holidaycheck_total_chf": 946.2,
+  "kronplatz_supplier_total_chf": 1080,
+  "kronplatz_supplier_conditions": "4 nights, 2 adults, Standard Room, breakfast, non-refundable, taxes and fees included; optional extras excluded",
+  "google_links": {
+    "Der Mesnerwirt": "https://www.google.com/travel/hotels/entity/CgsI8eqEgIGlv-arARAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA",
+    "Falkensteiner Kronplatz": "https://www.google.com/travel/hotels/entity/ChoIz4mjspCjiZb_ARoNL2cvMTFqaDBqZ2NsaBAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA"
+  }
+}

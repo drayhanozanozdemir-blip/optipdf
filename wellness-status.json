@@ -1,151 +1,16 @@
 {
-  "checked_on": "2026-10-09",
-  "hotel_count": 9,
-  "image_count": 14,
-  "currency": "EUR",
+  "checked_on": "2026-10-10",
+  "hotel_count": 2,
+  "image_count": 7,
+  "currency": "CHF",
   "prices_for": "7–11 November 2026; 2 adults; 1 room; 4 nights",
   "pool_specific_dates_confirmed": false,
   "hotels": [
     {
-      "name": "Chalet Mirabell",
-      "place": "Hafling · Meraner Land",
-      "region": "meran",
-      "price": 2782.8,
-      "score": "9,3",
-      "stars": "5 Sterne",
-      "badge": "Luxus-Spa",
-      "tags": [
-        "33 °C Infinity-Pool",
-        "25-m-Sunset-Pool",
-        "6.000 m² Spa"
-      ],
-      "text": "Grosszügige Poollandschaft, Panorama-Saunen und Adults-only-Bereiche.",
-      "slug": "geniesserhotel-mirabell",
-      "source": "https://www.chalet-mirabell.com/de/day-spa-suedtirol/27-0.html",
-      "image": "https://www.chalet-mirabell.com/images/content/105792_11661_1_C_1920_1080_0_3696771/day-spa-suedtirol-wellnesshotel-mirabell-meran.jpg",
-      "credit": "Chalet Mirabell",
-      "image_size": [
-        1200,
-        675
-      ],
-      "alt": "Originalfoto: Pool und Umgebung von Chalet Mirabell",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Beheizter Pool laut Booking ganzjährig.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/geniesserhotel-mirabell.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
-    },
-    {
-      "name": "La Maiena Meran Resort",
-      "slug": "la-maiena-life-resort",
-      "place": "Marling · Meraner Land",
-      "region": "meran",
-      "badge": "Panorama & Spa",
-      "tags": [
-        "32 °C Infinity-Pool",
-        "26 m Outdoor-Pool",
-        "Sensa Spa"
-      ],
-      "text": "Über Meran: Bergpanorama, Sky-Terrasse und warme Whirlpools.",
-      "source": "https://www.lamaiena.it/de/wellness-im-la-maiena/pools-relax",
-      "image": "https://www.lamaiena.it/media/dvecuhbm/240628094205.jpg",
-      "credit": "La Maiena Meran Resort",
-      "alt": "La Maiena: Aussenpool, Garten und Bergpanorama",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Hotel bewirbt November-Wellness ab 8.11.; warmer Panorama-Pool auch im Winter.",
-      "season_source": "https://www.lamaiena.it/it",
-      "image_size": [
-        1200,
-        800
-      ],
-      "price": 1767.6,
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/la-maiena-life-resort.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
-      "score": "9,4"
-    },
-    {
-      "name": "Hotel Hohenwart",
-      "slug": "hohenwart",
-      "place": "Schenna · Meraner Land",
-      "region": "meran",
-      "badge": "Solepool über Meran",
-      "tags": [
-        "34 °C Infinity-Solepool",
-        "VistaSpa ab 16",
-        "Panoramasauna"
-      ],
-      "text": "Dachterrasse mit 360°-Blick. Warmer Solepool und ruhiger Adults-only-Spa.",
-      "source": "https://www.hohenwart.com/de/wellnesshotel-schenna",
-      "image": "https://www.hohenwart.com/fileadmin/user_upload/5.jpg",
-      "credit": "Hotel Hohenwart",
-      "alt": "Hohenwart: Panoramasauna mit Blick über Meran und die Berge",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Offizielles 4=3-Angebot vom 7.11. bis 8.12. bestätigt Novemberbetrieb.",
-      "season_source": "https://www.hohenwart.com/en/accommodation/offers",
-      "image_size": [
-        1200,
-        800
-      ],
-      "price": 1554.96,
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/hohenwart.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
-      "score": "9,2"
-    },
-    {
-      "name": "Miramonti Boutique Hotel",
-      "place": "Hafling · Meraner Land",
-      "region": "meran",
-      "price": 2200.8,
-      "score": "9,7",
-      "stars": "5 Sterne",
-      "badge": "Panorama-Favorit",
-      "tags": [
-        "Infinity-Pool ab 32 °C",
-        "Onsen",
-        "Waldsauna"
-      ],
-      "text": "Über dem Meraner Talkessel. Mein Favorit für Aussicht und Design.",
-      "slug": "granpanoramaresidencehotelmiramonti",
-      "source": "https://www.hotel-miramonti.com/en/mm-spa/infinity-pool/",
-      "image": "https://www.hotel-miramonti.com/site/assets/files/6142/church_of_st_kathrein_-_infinity_pool_6_c_patrick_schwienbacher.0x1060.jpg",
-      "credit": "MIRAMONTI / Patrick Schwienbacher",
-      "image_size": [
-        1200,
-        798
-      ],
-      "alt": "Originalfoto: Pool und Umgebung von Miramonti Boutique Hotel",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Pool laut Hotel ganzjährig beheizt.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/granpanoramaresidencehotelmiramonti.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
-    },
-    {
-      "name": "Hotel Quelle Nature Spa Resort",
-      "slug": "quelle-s-natur-spa-resort",
-      "place": "Gsiesertal · Pustertal",
-      "region": "pustertal",
-      "badge": "36 °C Rooftop",
-      "tags": [
-        "36 °C Rooftop-Infinity",
-        "Sky Spa ab 16",
-        "31 °C Sport-Infinity-Pool"
-      ],
-      "text": "Im ruhigen Gsiesertal: Dolomitenblick, warme Wasserwelten und viel Spa.",
-      "source": "https://www.hotel-quelle.com/de/wellness/wasserwelt/31-0.html",
-      "image": "https://www.hotel-quelle.com/images/content/1425028_88254_1_C_645_485_967_494022890/dsc01607.jpg",
-      "credit": "Hotel Quelle Nature Spa Resort",
-      "alt": "Quelle: Paar im Rooftop-Infinity-Pool vor dem Bergpanorama",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Offizielles Wellnessangebot 8.–22.11.; Naturbadeteich im Winter geschlossen.",
-      "season_source": "https://www.hotel-quelle.com/de/wellnesshotel-gsiesertal/1-0.html",
-      "image_size": [
-        645,
-        485
-      ],
-      "price": 2467.4,
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/quelle-s-natur-spa-resort.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR",
-      "score": "9,7"
-    },
-    {
       "name": "Der Mesnerwirt",
       "place": "Hafling · Meraner Land",
       "region": "meran",
-      "price": 918.68,
+      "price": 855.09,
       "score": "9",
       "stars": "4 Sterne Superior",
       "badge": "Preis-Tipp",
@@ -165,14 +30,16 @@
       ],
       "alt": "Originalfoto: Pool und Umgebung von Der Mesnerwirt",
       "november": "Für 7.–11.11. auf Booking verfügbar. Pool laut Hotel ganzjährig beheizt.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/der-mesnerwirt.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
+      "currency": "CHF",
+      "booking_url": "https://www.booking.com/hotel/it/der-mesnerwirt.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=CHF",
+      "google_hotels": "https://www.google.com/travel/hotels/entity/CgsI8eqEgIGlv-arARAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA",
+      "price_source": "Booking search"
     },
     {
       "name": "Falkensteiner Kronplatz",
       "place": "Reischach / Bruneck · Pustertal",
       "region": "pustertal",
-      "price": 1347.4,
+      "price": 1080.0,
       "score": "9,2",
       "stars": "5 Sterne",
       "badge": "Rooftop & Design",
@@ -192,62 +59,11 @@
       ],
       "alt": "Originalfoto: Pool und Umgebung von Falkensteiner Kronplatz",
       "november": "Für 7.–11.11. auf Booking verfügbar. Beheizter Pool laut Booking ganzjährig.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/falkensteiner-kronplatz.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
-    },
-    {
-      "name": "Terentnerhof",
-      "place": "Terenten · Pustertal",
-      "region": "pustertal",
-      "price": 1632.19,
-      "score": "9,6",
-      "stars": "4 Sterne Superior",
-      "badge": "Sky Pool",
-      "tags": [
-        "Infinity-Sky-Pool",
-        "Ganzjährig beheizt",
-        "XXL-Whirlpool"
-      ],
-      "text": "Dachterrasse mit Bergblick. 8 × 4 m Whirlpool mit 35 °C.",
-      "slug": "terentnerhof",
-      "source": "https://www.terentnerhof.com/en/panoramic-infinity-sky-pool/",
-      "image": "https://www.terentnerhof.com/wp-content/uploads/pool2-terentnerhof.jpg",
-      "credit": "Hotel Terentnerhof",
-      "image_size": [
-        900,
-        900
-      ],
-      "alt": "Originalfoto: Pool und Umgebung von Terentnerhof",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Herbstangebote bis 8.12.; Pool ganzjährig beheizt.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/terentnerhof.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
-    },
-    {
-      "name": "Viktoria Alpine Hideaway",
-      "place": "Hafling · Meraner Land",
-      "region": "meran",
-      "price": 2660,
-      "score": "9,4",
-      "stars": "4 Sterne",
-      "badge": "Wald & Wellness",
-      "tags": [
-        "25-m-Infinity-Pool",
-        "Adults-only Sky Pool",
-        "6.000 m² Spa"
-      ],
-      "text": "Am Waldrand: viel Grün, Saunen und Bergblick vom Pool.",
-      "slug": "viktoria-kg-d-platzer-manfred",
-      "source": "https://www.hotel-viktoria.com/en/living/included-services/",
-      "image": "https://www.hotel-viktoria.com/fileadmin/_processed_/8/5/csm_4-sterne-hotel-hafling-meran-suedtirol-0714_4e0eb6b410.jpg",
-      "credit": "Viktoria Alpine Hideaway",
-      "image_size": [
-        1200,
-        800
-      ],
-      "alt": "Originalfoto: Pool und Umgebung von Viktoria Alpine Hideaway",
-      "november": "Für 7.–11.11. auf Booking verfügbar. Infinity-Pool laut Hotel ganzjährig beheizt.",
-      "currency": "EUR",
-      "booking_url": "https://www.booking.com/hotel/it/viktoria-kg-d-platzer-manfred.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=EUR"
+      "currency": "CHF",
+      "booking_url": null,
+      "google_hotels": "https://www.google.com/travel/hotels/entity/ChoIz4mjspCjiZb_ARoNL2cvMTFqaDBqZ2NsaBAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA",
+      "price_source": "trivago DEALS supplier page via Google Hotels"
     }
-  ]
+  ],
+  "max_total_chf": 1200
 }
