@@ -10,7 +10,7 @@
       "name": "Der Mesnerwirt",
       "place": "Hafling · Meraner Land",
       "region": "meran",
-      "price": 855.09,
+      "price": 514.91,
       "score": "9",
       "stars": "4 Sterne Superior",
       "badge": "Preis-Tipp",
@@ -31,15 +31,18 @@
       "alt": "Originalfoto: Pool und Umgebung von Der Mesnerwirt",
       "november": "Für 7.–11.11. auf Booking verfügbar. Pool laut Hotel ganzjährig beheizt.",
       "currency": "CHF",
-      "booking_url": "https://www.booking.com/hotel/it/der-mesnerwirt.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=CHF",
-      "google_hotels": "https://www.google.com/travel/hotels/entity/CgsI8eqEgIGlv-arARAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA",
-      "price_source": "Booking search"
+      "booking_url": "https://www.booking.com/hotel/it/der-mesnerwirt.html?aid=2438770&checkin=2026-11-07&checkout=2026-11-09&no_rooms=1&group_adults=2&selected_currency=CHF",
+      "google_hotels": "https://www.google.com/travel/hotels/entity/CgsI8eqEgIGlv-arARAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgJGAIyAggBKgkKBToDQ0hGGgA",
+      "price_source": "Booking search",
+      "checkin": "2026-11-07",
+      "checkout": "2026-11-09",
+      "nights": 2
     },
     {
       "name": "Falkensteiner Kronplatz",
       "place": "Reischach / Bruneck · Pustertal",
       "region": "pustertal",
-      "price": 1080.0,
+      "price": 528,
       "score": "9,2",
       "stars": "5 Sterne",
       "badge": "Rooftop & Design",
@@ -60,10 +63,19 @@
       "alt": "Originalfoto: Pool und Umgebung von Falkensteiner Kronplatz",
       "november": "Für 7.–11.11. auf Booking verfügbar. Beheizter Pool laut Booking ganzjährig.",
       "currency": "CHF",
-      "booking_url": null,
-      "google_hotels": "https://www.google.com/travel/hotels/entity/ChoIz4mjspCjiZb_ARoNL2cvMTFqaDBqZ2NsaBAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgHEgcI6g8QCxgLGAQyAggBKgkKBToDQ0hGGgA",
-      "price_source": "trivago DEALS supplier page via Google Hotels"
+      "booking_url": "https://www.booking.com/hotel/it/falkensteiner-kronplatz.html?aid=2438770&checkin=2026-11-09&checkout=2026-11-11&no_rooms=1&group_adults=2&selected_currency=CHF",
+      "google_hotels": "https://www.google.com/travel/hotels/entity/ChoIz4mjspCjiZb_ARoNL2cvMTFqaDBqZ2NsaBAB?hl=de&gl=ch&ts=CAEaIAoCGgASGhIUCgcI6g8QCxgJEgcI6g8QCxgLGAIyAggBKgkKBToDQ0hGGgA",
+      "price_source": "trivago DEALS supplier page via Google Hotels",
+      "checkin": "2026-11-09",
+      "checkout": "2026-11-11",
+      "nights": 2,
+      "offer_url": "https://www.trivago.deals/hotels/italy_07_bruneck/4207737_falkensteiner-hotel-kronplatz?checkIn=2026-11-09&checkOut=2026-11-11&placeId=H4207737&campaignName=TrivagoDeals_Google_CH&currencyCode=CHF&dealKey=CAIQqwciDAivgKjWBhC84_TtASpNDQAAhEMVAAAcRCWuRztCLQAAUEEwATh5RQAABERKDAisgKjWBhCI44jgAWIKRGVsdXhlIERvdWgCjQHNDIRDmAEBoAH9hJ2TA6gByAYwxwY4-eiAAkD19w9IAlIIeUnowL9QcBZY9AViAwoBIA&countryCode=CH&languageCode=de&rule=Google_CH&site=localuniversal&ads=&priceDisplayedTotal=528.00&priceDisplayedTax=59.83&device=desktop&adults=2&children=0",
+      "meal_plan": "half board",
+      "cancellation": "non-refundable"
     }
   ],
-  "max_total_chf": 1200
+  "max_total_chf": 1200,
+  "plan": "2+2 nights",
+  "combined_total_chf": 1042.91,
+  "remaining_budget_chf": 157.09
 }
