@@ -1,0 +1,40 @@
+{
+  "checked": "2026-10-10",
+  "adults": 2,
+  "four_night_windows": [
+    "2026-11-06/2026-11-10",
+    "2026-11-07/2026-11-11",
+    "2026-11-08/2026-11-12"
+  ],
+  "mesnerwirt": {
+    "regular_4n_eur": {
+      "breakfast": 1240,
+      "three_quarter_board": 1304
+    },
+    "regular_2n_7_9_eur": {
+      "breakfast": 684,
+      "three_quarter_board": 716
+    },
+    "43_offer_published": true,
+    "43_period": "2026-11-07/2026-11-15",
+    "43_advertised_from_eur": 525,
+    "43_exact_pair_total": null,
+    "43_booking_engine": "No packages bookable for 7-11 or 8-12 November despite published promotion",
+    "autumn_advertised_from_eur": 556,
+    "autumn_november_validity": "not confirmed"
+  },
+  "kronplatz": {
+    "43_grand_deluxe_halfboard_approx_chf_ex_city_tax": [
+      1264.6,
+      1250.56,
+      1229.56
+    ],
+    "members25_exact_price": null,
+    "members25_access": "sign-in required",
+    "prebook_9_11_approx_chf_ex_city_tax": {
+      "breakfast": 603.3,
+      "halfboard": 670.52
+    }
+  },
+  "no_booking_or_inquiry_sent": true
+}
