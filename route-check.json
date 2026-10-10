@@ -32,5 +32,8 @@
     "transfer_bozen": "https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt%2C+Kirchweg+2%2C+39010+Hafling&destination=Falkensteiner+Hotel+Kronplatz%2C+Seilbahnstrasse+1c%2C+Bruneck&travelmode=driving&waypoints=Parcheggio+Piazza+Walther%2C+Bolzano",
     "return": "https://www.google.com/maps/dir/?api=1&origin=Falkensteiner+Hotel+Kronplatz%2C+Seilbahnstrasse+1c%2C+Bruneck&destination=Mellingen%2C+Switzerland&travelmode=driving&waypoints=Innsbruck%2C+Austria%7CArlbergtunnel%2C+Austria"
   },
-  "primary_sources": []
+  "primary_sources": [],
+  "birthday": "2026-11-09",
+  "preferred_plan": "4 nights in one hotel; exact hotel not chosen",
+  "maps_observations_scope": "Prior 2+2 comparison only; not a newly confirmed single-hotel itinerary"
 }

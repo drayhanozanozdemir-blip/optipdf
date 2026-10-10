@@ -1,0 +1,31 @@
+{
+  "checked": "2026-10-10",
+  "birthday": "2026-11-09",
+  "gemini_thread": "https://gemini.google.com/app/ac4b6e7768a0476e",
+  "independently_verified_offers": [
+    {
+      "hotel": "Hohenwart",
+      "offer": "4=3",
+      "from_eur_per_person": 620,
+      "period": "2026-11-07/2026-12-08",
+      "board": "three-quarter",
+      "url": "https://www.hohenwart.com/en/accommodation/offers/offer-detail/feel-good-days-4-3"
+    },
+    {
+      "hotel": "Ansitz Plantiz",
+      "offer": "4=3",
+      "from_eur_per_person": 590,
+      "period": "2026-11-01/2026-11-15",
+      "board": "breakfast",
+      "url": "https://www.ansitz-plantiz.com/paket/herbstauszeit-43/"
+    }
+  ],
+  "exact_date_inventory_and_chf_totals": "not verified",
+  "rejected_gemini_claims": [
+    "Mesnerwirt promotion dates 6-14 November",
+    "Mesnerwirt free cancellation until 14 days",
+    "email inquiry automatically opens inventory",
+    "Kronplatz advertised average multiplied by 3 for a further discount",
+    "guaranteed budget compliance from from-prices"
+  ]
+}
