@@ -1,0 +1,15 @@
+{
+  "checked_on": "2026-10-10",
+  "date": "2026-11-08",
+  "planned_time": "14:00-17:00",
+  "adults": 2,
+  "pools_sauna_3h_total_eur": 70,
+  "pools_only_3h_total_eur": 46,
+  "reservation": "not made; slot availability not checked",
+  "address": "Thermenplatz 9, 39012 Meran",
+  "sources": [
+    "https://www.termemerano.it/de/infos-preise/preise/",
+    "https://www.termemerano.it/de/infos-preise/oeffnungszeiten/",
+    "https://www.termemerano.it/de/infos-preise/faq/"
+  ]
+}
