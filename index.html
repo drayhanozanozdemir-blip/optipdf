@@ -115,6 +115,8 @@ main { max-width: 1060px; margin: 0 auto; padding: 14px 14px 44px; }
 }
 .btn.primary { background: var(--pine); color: #fff; border-color: var(--pine); }
 .btn.wine { background: var(--wine); color: #fff; border-color: var(--wine); }
+.btn.apple { background: #1d1d1f; color: #fff; border-color: #1d1d1f; }
+.day-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .btn:hover { opacity: .92; }
 
 /* Day Cards */
@@ -148,7 +150,9 @@ main { max-width: 1060px; margin: 0 auto; padding: 14px 14px 44px; }
   display: inline-flex; align-items: center; gap: 5px;
   font-weight: 700; color: var(--ink); background: #fff;
   border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+  text-decoration: none;
 }
+.etappe-stop:hover { border-color: var(--pine); }
 .etappe-stop .pin-num {
   display: inline-flex; align-items: center; justify-content: center;
   width: 18px; height: 18px; border-radius: 50%; background: var(--pine); color: #fff;
@@ -246,6 +250,7 @@ footer {
       </div>
       <div class="route-links" style="margin-top:0">
         <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling&travelmode=driving" target="_blank" rel="noopener">📍 Hotel in Google Maps</a>
+        <a class="btn apple" href="https://maps.apple.com/directions?destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&mode=driving" target="_blank" rel="noopener">🍎 Hotel in Apple Karten</a>
         <a class="btn" href="https://www.mesnerwirt.it/de/wellnessurlaub-hafling-meran/infinity-pool/" target="_blank" rel="noopener">Pool & Spa ansehen ↗</a>
       </div>
     </div>
@@ -291,7 +296,10 @@ footer {
           <span class="day-pill">Tag 1 · Sa, 07.11.2026</span>
           <h3>Anreise: Mellingen → Vereina → Reschensee → Glurns → Hafling</h3>
         </div>
-        <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Mellingen,Switzerland&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Klosters+Selfranga+Autoverlad%7CSagliains+Autoverlad%7CKirchturm+von+Altgraun,Reschensee%7CGlurns" target="_blank" rel="noopener">📍 Tagesroute in Google Maps öffnen</a>
+        <div class="day-actions">
+          <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Mellingen,Switzerland&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Klosters+Selfranga+Autoverlad%7CSagliains+Autoverlad%7CKirchturm+von+Altgraun,Reschensee%7CGlurns" target="_blank" rel="noopener">📍 Tagesroute in Google Maps</a>
+          <a class="btn apple" href="https://maps.apple.com/directions?source=Mellingen,+Switzerland&waypoint=Klosters+Selfranga,+Klosters,+Switzerland&waypoint=Sagliains+Autoverlad,+Susen,+Switzerland&waypoint=Kirchturm+von+Altgraun,+Graun+im+Vinschgau,+Italy&waypoint=Glurns,+Italy&destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&mode=driving" target="_blank" rel="noopener">🍎 Tagesroute in Apple Karten</a>
+        </div>
       </div>
       <div class="etappen-bar" aria-label="Etappen an Tag 1">
         <span class="etappe-stop"><span class="pin-num">1</span> Mellingen</span>
@@ -333,7 +341,10 @@ footer {
           <span class="day-pill">Tag 2 · So, 08.11.2026</span>
           <h3>Gärten von Trauttmansdorff (Saisonfinale!) → Karersee → Ritten</h3>
         </div>
-        <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=G%C3%A4rten+von+Schloss+Trauttmansdorff,Meran%7CKarersee%7CRittner+Seilbahn,Bozen" target="_blank" rel="noopener">📍 Tagesroute in Google Maps öffnen</a>
+        <div class="day-actions">
+          <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=G%C3%A4rten+von+Schloss+Trauttmansdorff,Meran%7CKarersee%7CRittner+Seilbahn,Bozen" target="_blank" rel="noopener">📍 Tagesroute in Google Maps</a>
+          <a class="btn apple" href="https://maps.apple.com/directions?source=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&waypoint=Schloss+Trauttmansdorff,+Meran,+Italy&waypoint=Karersee,+Welschnofen,+Italy&waypoint=Funivia+del+Renon,+Bolzano,+Italy&destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&mode=driving" target="_blank" rel="noopener">🍎 Tagesroute in Apple Karten</a>
+        </div>
       </div>
       <div class="etappen-bar" aria-label="Etappen an Tag 2">
         <span class="etappe-stop base"><span class="pin-num">H</span> Hafling</span>
@@ -374,7 +385,10 @@ footer {
           <span class="day-pill">Tag 3 · Mo, 09.11.2026 ♡ GEBURTSTAG</span>
           <h3>Michaelas Wellness-Geburtstag: Meran Lauben → Therme Meran → Sunset & Dinner</h3>
         </div>
-        <a class="btn wine" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Laubengasse,Meran%7CTherme+Meran,Meran%7CMiramonti+Boutique+Hotel,Hafling" target="_blank" rel="noopener">📍 Geburtstagsroute in Google Maps öffnen</a>
+        <div class="day-actions">
+          <a class="btn wine" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Laubengasse,Meran%7CTherme+Meran,Meran%7CMiramonti+Boutique+Hotel,Hafling" target="_blank" rel="noopener">📍 Geburtstagsroute in Google Maps</a>
+          <a class="btn apple" href="https://maps.apple.com/directions?source=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&waypoint=Lauben,+39012+Meran,+Italy&waypoint=Therme+Meran,+Meran,+Italy&waypoint=Miramonti+Boutique+Hotel,+Hafling,+Italy&destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&mode=driving" target="_blank" rel="noopener">🍎 Geburtstagsroute in Apple Karten</a>
+        </div>
       </div>
       <div class="etappen-bar" aria-label="Etappen an Tag 3">
         <span class="etappe-stop base"><span class="pin-num">H</span> Suite & Frühstück</span>
@@ -416,7 +430,10 @@ footer {
           <span class="day-pill">Tag 4 · Di, 10.11.2026</span>
           <h3>Bozen (Ötzi & Waltherplatz) → Dolomiten-Blick im Villnösstal</h3>
         </div>
-        <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Parcheggio+Piazza+Walther,Bolzano%7CSt.+Johann+in+Ranui,Villn%C3%B6ss%7CSt.+Magdalena,Villn%C3%B6ss" target="_blank" rel="noopener">📍 Tagesroute in Google Maps öffnen</a>
+        <div class="day-actions">
+          <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&travelmode=driving&waypoints=Parcheggio+Piazza+Walther,Bolzano%7CSt.+Johann+in+Ranui,Villn%C3%B6ss%7CSt.+Magdalena,Villn%C3%B6ss" target="_blank" rel="noopener">📍 Tagesroute in Google Maps</a>
+          <a class="btn apple" href="https://maps.apple.com/directions?source=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&waypoint=Piazza+Walther,+39100+Bolzano,+Italy&waypoint=Kirche+St.+Johann+in+Ranui,+Villn%C3%B6ss,+Italy&waypoint=St.+Magdalena,+Villn%C3%B6ss,+Italy&destination=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&mode=driving" target="_blank" rel="noopener">🍎 Tagesroute in Apple Karten</a>
+        </div>
       </div>
       <div class="etappen-bar" aria-label="Etappen an Tag 4">
         <span class="etappe-stop base"><span class="pin-num">H</span> Hafling</span>
@@ -454,7 +471,10 @@ footer {
           <span class="day-pill">Tag 5 · Mi, 11.11.2026</span>
           <h3>Heimreise: Hafling → Vinschgau → Martina / Scuol → Vereina → Mellingen</h3>
         </div>
-        <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Mellingen,Switzerland&travelmode=driving&waypoints=Martina,Switzerland%7CSagliains+Autoverlad%7CKlosters+Selfranga+Autoverlad" target="_blank" rel="noopener">📍 Heimreise-Route in Google Maps öffnen</a>
+        <div class="day-actions">
+          <a class="btn primary" href="https://www.google.com/maps/dir/?api=1&origin=Hotel+Mesnerwirt,Kirchweg+2,39010+Hafling&destination=Mellingen,Switzerland&travelmode=driving&waypoints=Martina,Switzerland%7CSagliains+Autoverlad%7CKlosters+Selfranga+Autoverlad" target="_blank" rel="noopener">📍 Heimreise-Route in Google Maps</a>
+          <a class="btn apple" href="https://maps.apple.com/directions?source=Hotel+Mesnerwirt,+Kirchweg+2,+39010+Hafling,+Italy&waypoint=Martina,+Switzerland&waypoint=Scuol,+Switzerland&waypoint=Sagliains+Autoverlad,+Susen,+Switzerland&waypoint=Klosters+Selfranga,+Klosters,+Switzerland&destination=Mellingen,+Switzerland&mode=driving" target="_blank" rel="noopener">🍎 Heimreise-Route in Apple Karten</a>
+        </div>
       </div>
       <div class="etappen-bar" aria-label="Etappen an Tag 5">
         <span class="etappe-stop base"><span class="pin-num">H</span> Hafling (10:00)</span>
